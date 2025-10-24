@@ -7,7 +7,7 @@ import os
 import importlib.util
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGIC_MODULE_DIR = os.path.join(APP_DIR, "logic_modules")
+LOGIC_MODULE_DIR = "logic_modules"
 
 # --- All helper functions (display_generation_summary, etc.) remain unchanged ---
 def display_generation_summary(df_results):
