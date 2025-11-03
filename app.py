@@ -7,7 +7,7 @@ import os
 import importlib.util
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGIC_MODULE_DIR = "logic_modules"
+LOGIC_MODULE_DIR = os.path.join(APP_DIR, "logic_modules")
 
 # --- All helper functions (display_generation_summary, etc.) remain unchanged ---
 def display_generation_summary(df_results):
@@ -189,318 +189,329 @@ if st.session_state.selected_module_name_py and st.session_state.generated_df is
 
             epic_map = getattr(logic_module, 'EPIC_MAP')
             select_all = st.checkbox("Select/Deselect All Epics", value=True, key='select_all_epics_master')
-            st.markdown("#### Configure Epics and Case Counts")
+            # st.markdown("#### Configure Epics and Case Counts")
             # st.markdown("---")
-            ppt_names = ["Single Pay", "Limited Pay (5 pay)", "Limited Pay (10 pay)", "Limited Pay (15 pay)", "Limited Pay (Pay till age 60)", "Regular Pay"]
-
-            for epic_key, epic_desc in epic_map.items():
-                toggle_key = None
+            with st.expander("ℹ️ Configure Epics and Case Counts", expanded=True):
                 ppt_names = ["Single Pay", "Limited Pay (5 pay)", "Limited Pay (10 pay)", "Limited Pay (15 pay)", "Limited Pay (Pay till age 60)", "Regular Pay"]
-                entry_age_ppt_ranges = {
-                    "Single Pay": (18, 65),
-                    "Limited Pay (5 pay)": (18, 65),
-                    "Limited Pay (10 pay)": (18, 65),
-                    "Limited Pay (15 pay)": (18, 65),
-                    "Limited Pay (Pay till age 60)": (18, 55),
-                    "Regular Pay": (18, 65)
-                }
-                policy_term_ppt_ranges = {
-                    "Single Pay": (1, 5),
-                    "Limited Pay (5 pay)": (10, 67),
-                    "Limited Pay (10 pay)": (15, 67),
-                    "Limited Pay (15 pay)": (20, 67),
-                    "Limited Pay (Pay till age 60)": (5, 67),
-                    "Regular Pay": (5, 67)
-                }
-                maturity_age_ppt_ranges = {
-                    "Single Pay": (19, 85),
-                    "Limited Pay (5 pay)": (24, 85),
-                    "Limited Pay (10 pay)": (29, 85),
-                    "Limited Pay (15 pay)": (34, 85),
-                    "Limited Pay (Pay till age 60)": (65, 85),
-                    "Regular Pay": (23, 85)
-                }
-                premium_paying_ppt_ranges = {
-                    "Single Pay": (1, 1),
-                    "Limited Pay (5 pay)": (5, 5),
-                    "Limited Pay (10 pay)": (10, 10),
-                    "Limited Pay (15 pay)": (15, 15),
-                    "Limited Pay (Pay till age 60)": (5, 42),
-                    "Regular Pay": (5, 67)
-                }
 
-                if count_mode == "Set Individual Counts for Each Epic":
-                    if epic_key == "EntryAge" or epic_key == "PremiumPayingTerm" or epic_key == "PolicyTerm" or epic_key == "MaturityAge":
+                for epic_key, epic_desc in epic_map.items():
+                    toggle_key = None
+                    ppt_names = ["Single Pay", "Limited Pay (5 pay)", "Limited Pay (10 pay)", "Limited Pay (15 pay)", "Limited Pay (Pay till age 60)", "Regular Pay"]
+                    entry_age_ppt_ranges = {
+                        "Single Pay": (18, 65),
+                        "Limited Pay (5 pay)": (18, 65),
+                        "Limited Pay (10 pay)": (18, 65),
+                        "Limited Pay (15 pay)": (18, 65),
+                        "Limited Pay (Pay till age 60)": (18, 55),
+                        "Regular Pay": (18, 65)
+                    }
+                    policy_term_ppt_ranges = {
+                        "Single Pay": (1, 5),
+                        "Limited Pay (5 pay)": (10, 67),
+                        "Limited Pay (10 pay)": (15, 67),
+                        "Limited Pay (15 pay)": (20, 67),
+                        "Limited Pay (Pay till age 60)": (5, 67),
+                        "Regular Pay": (5, 67)
+                    }
+                    maturity_age_ppt_ranges = {
+                        "Single Pay": (19, 85),
+                        "Limited Pay (5 pay)": (24, 85),
+                        "Limited Pay (10 pay)": (29, 85),
+                        "Limited Pay (15 pay)": (34, 85),
+                        "Limited Pay (Pay till age 60)": (65, 85),
+                        "Regular Pay": (23, 85)
+                    }
+                    premium_paying_ppt_ranges = {
+                        "Single Pay": (1, 1),
+                        "Limited Pay (5 pay)": (5, 5),
+                        "Limited Pay (10 pay)": (10, 10),
+                        "Limited Pay (15 pay)": (15, 15),
+                        "Limited Pay (Pay till age 60)": (5, 42),
+                        "Regular Pay": (5, 67)
+                    }
+                    sum_assured_ranges = {
+                        "Single Pay": (2500000, 5000000),
+                        "Others": (5000000, 20000000),
+                    }
 
-                        is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
-                        with st.expander("Show/Hide PPT Configuration", expanded=False):
-                            ppt_age_ranges, ppt_pos_counts, ppt_neg_counts, ppt_enabled = {}, {}, {}, {}
+                    if count_mode == "Set Individual Counts for Each Epic":
+                        if epic_key == "EntryAge" or epic_key == "PremiumPayingTerm" or epic_key == "PolicyTerm" or epic_key == "MaturityAge":
 
-                            header = st.columns([0.5, 2, 2, 1, 1])
-                            # with header[0]: st.markdown("**Enable**")
-                            with header[1]: st.markdown("**PPT Name**")
-                            with header[2]: st.markdown("**Min/Max**")
-                            with header[3]: st.markdown("**Pos**")
-                            with header[4]: st.markdown("**Neg**")
+                            is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
+                            with st.expander("Show/Hide PPT Configuration", expanded=False):
+                                ppt_age_ranges, ppt_pos_counts, ppt_neg_counts, ppt_enabled = {}, {}, {}, {}
 
-                            for ppt in ppt_names:
-                                row = st.columns([0.5, 2, 2, 1, 1])
-                                with row[0]:
-                                    enabled = st.checkbox("Enable", value=is_selected, key=f"ppt_enabled_{epic_key}_{ppt}", label_visibility="collapsed")
-                                with row[1]: st.markdown(ppt)
-                                with row[2]:
-                                    if(epic_key == "EntryAge"):
-                                        min_age, max_age = st.slider("Entry Age", 0, 85, entry_age_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}",
-                                                                label_visibility="collapsed")
-                                    elif(epic_key == "PolicyTerm"):
+                                header = st.columns([0.5, 2, 2, 1, 1])
+                                # with header[0]: st.markdown("**Enable**")
+                                with header[1]: st.markdown("**PPT Name**")
+                                with header[2]: st.markdown("**Min/Max**")
+                                with header[3]: st.markdown("**Pos**")
+                                with header[4]: st.markdown("**Neg**")
+
+                                for ppt in ppt_names:
+                                    row = st.columns([0.5, 2, 2, 1, 1])
+                                    with row[0]:
+                                        enabled = st.checkbox("Enable", value=is_selected, key=f"ppt_enabled_{epic_key}_{ppt}", label_visibility="collapsed")
+                                    with row[1]: st.markdown(ppt)
+                                    with row[2]:
+                                        if(epic_key == "EntryAge"):
+                                            min_age, max_age = st.slider("Entry Age", 0, 85, entry_age_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}",
+                                                                    label_visibility="collapsed")
+                                        elif(epic_key == "PolicyTerm"):
+                                                min_age, max_age = st.slider("Policy Term", 5, 80, policy_term_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}",
+                                                                    label_visibility="collapsed")
+                                        elif(epic_key == "MaturityAge"):
+                                            min_age, max_age = st.slider("Maturity Age", 19, 85, maturity_age_ppt_ranges[ppt], key=f"maturity_age_slider_{epic_key}_{ppt}",
+                                                                    label_visibility="collapsed")
+                                        else:
+                                            if(premium_paying_ppt_ranges[ppt][0] == premium_paying_ppt_ranges[ppt][1]):
+                                                min_age = max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt][0], key=f"entry_age_slider_{epic_key}_{ppt}", label_visibility="collapsed")
+                                            else:
+                                                min_age, max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}",
+                                                                    label_visibility="collapsed")
+                                    with row[3]:
+                                        pos = st.number_input("Pos", 0, value=5, key=f"epic_pos_{epic_key}_{ppt}", label_visibility="collapsed")
+                                    with row[4]:
+                                        neg = st.number_input("Neg", 0, value=5, key=f"epic_neg_{epic_key}_{ppt}", label_visibility="collapsed")
+
+                                    if enabled:
+                                        ppt_age_ranges[ppt] = (min_age, max_age)
+                                        ppt_pos_counts[ppt] = pos
+                                        ppt_neg_counts[ppt] = neg
+                                        ppt_enabled[ppt] = True
+                                    else:
+                                        ppt_enabled[ppt] = False
+
+                                if is_selected and any(ppt_enabled.values()):
+                                    selected_epics.append(epic_key)
+                                    epic_counts[epic_key] = {
+                                        "ppt_age_ranges": ppt_age_ranges,
+                                        "ppt_pos_counts": ppt_pos_counts,
+                                        "ppt_neg_counts": ppt_neg_counts,
+                                        "ppt_enabled": ppt_enabled
+                                    }
+
+                        elif epic_key == "PaymentFrequency":
+                            row = st.columns([2, 1.5, 1.5])
+                            with row[0]:        
+                                is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
+                            with row[1]:
+                                pos_count = st.number_input(f"Pos {epic_key}", min_value=0, value=5, key=f"epic_pos_{epic_key}", label_visibility="collapsed", placeholder="Pos")
+                            with row[2]:
+                                neg_count = st.number_input(f"Neg {epic_key}", min_value=0, value=5, key=f"epic_neg_{epic_key}", label_visibility="collapsed", placeholder="Neg")
+
+                            frequency_options = ["Annual", "Half-Yearly", "Quarterly", "Monthly", "Single Pay"]
+                            frequency_map = {"Annual": 1, "Half-Yearly": 2, "Quarterly": 3, "Monthly": 4, "Single Pay": 5}
+                            freq_cols = st.columns(len(frequency_options)+1)
+                            selected_frequencies = []
+                            for i, freq in enumerate(frequency_options):
+                                with freq_cols[i+1]:
+                                    if st.checkbox(freq, value=is_selected, key=f"freq_cb_{freq}"):
+                                        selected_frequencies.append(freq)
+
+                            mapped_frequencies = [frequency_map[f] for f in selected_frequencies]
+
+                            if is_selected:
+                                selected_epics.append(epic_key)
+                                epic_counts[epic_key] = {
+                                    "positive": pos_count,
+                                    "negative": neg_count,
+                                    "payment_frequency_options": mapped_frequencies
+                                }
+
+                        elif epic_key == "SumAssuredValidation":
+                            is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
+                            with st.expander("Show/Hide PPT Configuration", expanded=False):
+
+                                header = st.columns([0.5, 2, 1, 1, 1, 1])
+                                # with header[0]: st.markdown("**Enable**")
+                                with header[1]: st.markdown("**PPT Type**")
+                                with header[2]: st.markdown("**Min**")
+                                with header[3]: st.markdown("**Max**")
+                                with header[4]: st.markdown("**Pos**")
+                                with header[5]: st.markdown("**Neg**")
+
+                                row_sp = st.columns([0.5, 2, 1, 1, 1, 1])
+                                with row_sp[0]:
+                                    sp = st.checkbox("Enable", value=is_selected, key=f"sa_enabled_{epic_key}", label_visibility="collapsed")
+                                with row_sp[1]:
+                                    st.markdown("SinglePay")
+                                with row_sp[2]:
+                                    min_sp = st.number_input("Min SinglePay", min_value=0, value=sum_assured_ranges["Single Pay"][0], key=f"min_sp_{epic_key}", label_visibility="collapsed")
+                                with row_sp[3]:
+                                    max_sp = st.number_input("Max SinglePay", min_value=min_sp, value=sum_assured_ranges["Single Pay"][1], key=f"max_sp_{epic_key}", label_visibility="collapsed")
+                                with row_sp[4]:
+                                    pos_sp = st.number_input("Pos SinglePay", min_value=0, value=5, key=f"pos_sp_{epic_key}", label_visibility="collapsed")
+                                with row_sp[5]:
+                                    neg_sp = st.number_input("Neg SinglePay", min_value=0, value=5, key=f"neg_sp_{epic_key}", label_visibility="collapsed")
+
+                                row_oth = st.columns([0.5, 2, 1, 1, 1, 1])
+                                with row_oth[0]:
+                                    oth = st.checkbox("Enable", value=is_selected, key=f"oth_enabled_{epic_key}", label_visibility="collapsed")
+                                with row_oth[1]:
+                                    st.markdown("Others")
+                                with row_oth[2]:
+                                    min_oth = st.number_input("Min Others", min_value=0, value=sum_assured_ranges["Others"][0], key=f"min_oth_{epic_key}", label_visibility="collapsed")
+                                with row_oth[3]:
+                                    max_oth = st.number_input("Max Others", min_value=min_oth, value=sum_assured_ranges["Others"][1], key=f"max_oth_{epic_key}", label_visibility="collapsed")
+                                with row_oth[4]:
+                                    pos_oth = st.number_input("Pos Others", min_value=0, value=5, key=f"pos_oth_{epic_key}", label_visibility="collapsed")
+                                with row_oth[5]:
+                                    neg_oth = st.number_input("Neg Others", min_value=0, value=5, key=f"neg_oth_{epic_key}", label_visibility="collapsed")
+
+                                if is_selected:
+                                    selected_epics.append(epic_key)
+                                    if epic_key not in epic_counts:
+                                        epic_counts[epic_key] = {}
+                                    if sp:
+                                        epic_counts[epic_key]["Single Pay"] = {
+                                            "min_val": min_sp,
+                                            "max_val": max_sp,
+                                            "positive": num_positive_global,
+                                            "negative": num_negative_global
+                                        }
+                                    if oth:
+                                        epic_counts[epic_key]["Others"] = {
+                                            "min_val": min_oth,
+                                            "max_val": max_oth,
+                                            "positive": num_positive_global,
+                                            "negative": num_negative_global
+                                        }
+
+                        else:
+                            # For other epics, use slider for min/max and number inputs for pos/neg
+                            row = st.columns([2, 1.5, 1.5])
+                            with row[0]:        
+                                is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
+                            with row[1]:
+                                pos_count = st.number_input(f"Pos {epic_key}", min_value=0, value=5, key=f"epic_pos_{epic_key}", label_visibility="collapsed", placeholder="Pos")
+                            with row[2]:
+                                neg_count = st.number_input(f"Neg {epic_key}", min_value=0, value=5, key=f"epic_neg_{epic_key}", label_visibility="collapsed", placeholder="Neg")
+                            if is_selected:
+                                selected_epics.append(epic_key)
+                                epic_counts[epic_key] = {
+                                    "positive": pos_count,
+                                    "negative": neg_count
+                                }
+
+                    else:  # Apply Same Count to All Epics
+                        if epic_key == "EntryAge" or epic_key == "PremiumPayingTerm" or epic_key == "PolicyTerm" or epic_key == "MaturityAge":
+
+                            is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
+                            with st.expander("Show/Hide PPT Configuration", expanded=False):
+                                ppt_age_ranges, ppt_enabled = {}, {}
+
+                                for ppt in ppt_names:
+                                    row = st.columns([0.5, 2, 2])
+                                    with row[0]:
+                                        enabled = st.checkbox("Enable", value=is_selected, key=f"ppt_enabled_all_{epic_key}_{ppt}", label_visibility="collapsed")
+                                    with row[1]: st.markdown(ppt)
+                                    with row[2]:
+                                        if(epic_key == "EntryAge"):
+                                            min_age, max_age = st.slider("Entry Age", 0, 85, entry_age_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}",
+                                                                    label_visibility="collapsed")
+                                        elif(epic_key == "PolicyTerm"):
                                             min_age, max_age = st.slider("Policy Term", 5, 80, policy_term_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}",
-                                                                label_visibility="collapsed")
-                                    elif(epic_key == "MaturityAge"):
-                                        min_age, max_age = st.slider("Maturity Age", 19, 85, maturity_age_ppt_ranges[ppt], key=f"maturity_age_slider_{epic_key}_{ppt}",
-                                                                label_visibility="collapsed")
-                                    else:
-                                        if(premium_paying_ppt_ranges[ppt][0] == premium_paying_ppt_ranges[ppt][1]):
-                                            min_age = max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt][0], key=f"entry_age_slider_{epic_key}_{ppt}", label_visibility="collapsed")
+                                                                    label_visibility="collapsed")
+                                        elif(epic_key == "MaturityAge"):
+                                            min_age, max_age = st.slider("Maturity Age", 19, 85, maturity_age_ppt_ranges[ppt], key=f"maturity_age_slider_{epic_key}_{ppt}",
+                                                                    label_visibility="collapsed")
                                         else:
-                                            min_age, max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}",
-                                                                label_visibility="collapsed")
-                                with row[3]:
-                                    pos = st.number_input("Pos", 0, value=5, key=f"epic_pos_{epic_key}_{ppt}", label_visibility="collapsed")
-                                with row[4]:
-                                    neg = st.number_input("Neg", 0, value=5, key=f"epic_neg_{epic_key}_{ppt}", label_visibility="collapsed")
+                                            if(premium_paying_ppt_ranges[ppt][0] == premium_paying_ppt_ranges[ppt][1]):
+                                                min_age = max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt][0], key=f"entry_age_slider_{epic_key}_{ppt}", label_visibility="collapsed")
+                                            else:
+                                                min_age, max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}",
+                                                                    label_visibility="collapsed")
+                                    if enabled:
+                                        ppt_age_ranges[ppt] = (min_age, max_age)
+                                        ppt_enabled[ppt] = True
+                                    else:
+                                        ppt_enabled[ppt] = False
 
-                                if enabled:
-                                    ppt_age_ranges[ppt] = (min_age, max_age)
-                                    ppt_pos_counts[ppt] = pos
-                                    ppt_neg_counts[ppt] = neg
-                                    ppt_enabled[ppt] = True
-                                else:
-                                    ppt_enabled[ppt] = False
+                                if is_selected and any(ppt_enabled.values()):
+                                    selected_epics.append(epic_key)
+                                    epic_counts[epic_key] = {
+                                        "ppt_age_ranges": ppt_age_ranges,
+                                        "ppt_enabled": ppt_enabled,
+                                        "positive": num_positive_global,
+                                        "negative": num_negative_global
+                                    }
 
-                            if is_selected and any(ppt_enabled.values()):
-                                selected_epics.append(epic_key)
-                                epic_counts[epic_key] = {
-                                    "ppt_age_ranges": ppt_age_ranges,
-                                    "ppt_pos_counts": ppt_pos_counts,
-                                    "ppt_neg_counts": ppt_neg_counts,
-                                    "ppt_enabled": ppt_enabled
-                                }
-
-                    elif epic_key == "PaymentFrequency":
-                        row = st.columns([2, 1.5, 1.5])
-                        with row[0]:        
+                        elif epic_key == "PaymentFrequency":
                             is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
-                        with row[1]:
-                            pos_count = st.number_input(f"Pos {epic_key}", min_value=0, value=5, key=f"epic_pos_{epic_key}", label_visibility="collapsed", placeholder="Pos")
-                        with row[2]:
-                            neg_count = st.number_input(f"Neg {epic_key}", min_value=0, value=5, key=f"epic_neg_{epic_key}", label_visibility="collapsed", placeholder="Neg")
+                            frequency_options = ["Annual", "Half-Yearly", "Quarterly", "Monthly", "Single Pay"]
+                            frequency_map = {"Annual": 1, "Half-Yearly": 2, "Quarterly": 3, "Monthly": 4, "Single Pay": 5}
+                            freq_cols = st.columns(len(frequency_options)+1)
+                            selected_frequencies = []
+                            for i, freq in enumerate(frequency_options):
+                                with freq_cols[i+1]:
+                                    if st.checkbox(freq, value=is_selected, key=f"freq_cb_{freq}"):
+                                        selected_frequencies.append(freq)
 
-                        frequency_options = ["Annual", "Half-Yearly", "Quarterly", "Monthly", "Single Pay"]
-                        frequency_map = {"Annual": 1, "Half-Yearly": 2, "Quarterly": 3, "Monthly": 4, "Single Pay": 5}
-                        freq_cols = st.columns(len(frequency_options)+1)
-                        selected_frequencies = []
-                        for i, freq in enumerate(frequency_options):
-                            with freq_cols[i+1]:
-                                if st.checkbox(freq, value=is_selected, key=f"freq_cb_{freq}"):
-                                    selected_frequencies.append(freq)
-
-                        mapped_frequencies = [frequency_map[f] for f in selected_frequencies]
-
-                        if is_selected:
-                            selected_epics.append(epic_key)
-                            epic_counts[epic_key] = {
-                                "positive": pos_count,
-                                "negative": neg_count,
-                                "payment_frequency_options": mapped_frequencies
-                            }
-
-                    elif epic_key == "SumAssuredValidation":
-                        is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
-                        with st.expander("Show/Hide PPT Configuration", expanded=False):
-
-                            header = st.columns([0.5, 2, 1, 1, 1, 1])
-                            # with header[0]: st.markdown("**Enable**")
-                            with header[1]: st.markdown("**PPT Type**")
-                            with header[2]: st.markdown("**Min**")
-                            with header[3]: st.markdown("**Max**")
-                            with header[4]: st.markdown("**Pos**")
-                            with header[5]: st.markdown("**Neg**")
-
-                            row_sp = st.columns([0.5, 2, 1, 1, 1, 1])
-                            with row_sp[0]:
-                                sp = st.checkbox("Enable", value=is_selected, key=f"sa_enabled_{epic_key}", label_visibility="collapsed")
-                            with row_sp[1]:
-                                st.markdown("SinglePay")
-                            with row_sp[2]:
-                                min_sp = st.number_input("Min SinglePay", min_value=0, value=2500000, key=f"min_sp_{epic_key}", label_visibility="collapsed")
-                            with row_sp[3]:
-                                max_sp = st.number_input("Max SinglePay", min_value=min_sp, value=5000000, key=f"max_sp_{epic_key}", label_visibility="collapsed")
-                            with row_sp[4]:
-                                pos_sp = st.number_input("Pos SinglePay", min_value=0, value=5, key=f"pos_sp_{epic_key}", label_visibility="collapsed")
-                            with row_sp[5]:
-                                neg_sp = st.number_input("Neg SinglePay", min_value=0, value=5, key=f"neg_sp_{epic_key}", label_visibility="collapsed")
-
-                            row_oth = st.columns([0.5, 2, 1, 1, 1, 1])
-                            with row_oth[0]:
-                                oth = st.checkbox("Enable", value=is_selected, key=f"oth_enabled_{epic_key}", label_visibility="collapsed")
-                            with row_oth[1]:
-                                st.markdown("Others")
-                            with row_oth[2]:
-                                min_oth = st.number_input("Min Others", min_value=0, value=5000000, key=f"min_oth_{epic_key}", label_visibility="collapsed")
-                            with row_oth[4]:
-                                pos_oth = st.number_input("Pos Others", min_value=0, value=5, key=f"pos_oth_{epic_key}", label_visibility="collapsed")
-                            with row_oth[5]:
-                                neg_oth = st.number_input("Neg Others", min_value=0, value=5, key=f"neg_oth_{epic_key}", label_visibility="collapsed")
+                            mapped_frequencies = [frequency_map[f] for f in selected_frequencies]
 
                             if is_selected:
                                 selected_epics.append(epic_key)
-                                if epic_key not in epic_counts:
-                                    epic_counts[epic_key] = {}
-                                if sp:
-                                    epic_counts[epic_key]["Single Pay"] = {
-                                        "min_val": min_sp,
-                                        "max_val": max_sp,
-                                        "positive": num_positive_global,
-                                        "negative": num_negative_global
-                                    }
-                                if oth:
-                                    epic_counts[epic_key]["Others"] = {
-                                        "min_val": min_oth,
-                                        "positive": num_positive_global,
-                                        "negative": num_negative_global
-                                    }
-
-                    else:
-                        # For other epics, use slider for min/max and number inputs for pos/neg
-                        row = st.columns([2, 1.5, 1.5])
-                        with row[0]:        
-                            is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
-                        with row[1]:
-                            pos_count = st.number_input(f"Pos {epic_key}", min_value=0, value=5, key=f"epic_pos_{epic_key}", label_visibility="collapsed", placeholder="Pos")
-                        with row[2]:
-                            neg_count = st.number_input(f"Neg {epic_key}", min_value=0, value=5, key=f"epic_neg_{epic_key}", label_visibility="collapsed", placeholder="Neg")
-                        if is_selected:
-                            selected_epics.append(epic_key)
-                            epic_counts[epic_key] = {
-                                "positive": pos_count,
-                                "negative": neg_count
-                            }
-
-                else:  # Apply Same Count to All Epics
-                    if epic_key == "EntryAge" or epic_key == "PremiumPayingTerm" or epic_key == "PolicyTerm" or epic_key == "MaturityAge":
-
-                        is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
-                        with st.expander("Show/Hide PPT Configuration", expanded=False):
-                            ppt_age_ranges, ppt_enabled = {}, {}
-
-                            for ppt in ppt_names:
-                                row = st.columns([0.5, 2, 2])
-                                with row[0]:
-                                    enabled = st.checkbox("Enable", value=is_selected, key=f"ppt_enabled_all_{epic_key}_{ppt}", label_visibility="collapsed")
-                                with row[1]: st.markdown(ppt)
-                                with row[2]:
-                                    if(epic_key == "EntryAge"):
-                                        min_age, max_age = st.slider("Entry Age", 0, 85, entry_age_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}",
-                                                                label_visibility="collapsed")
-                                    elif(epic_key == "PolicyTerm"):
-                                        min_age, max_age = st.slider("Policy Term", 5, 80, policy_term_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}",
-                                                                label_visibility="collapsed")
-                                    elif(epic_key == "MaturityAge"):
-                                        min_age, max_age = st.slider("Maturity Age", 19, 85, maturity_age_ppt_ranges[ppt], key=f"maturity_age_slider_{epic_key}_{ppt}",
-                                                                label_visibility="collapsed")
-                                    else:
-                                        if(premium_paying_ppt_ranges[ppt][0] == premium_paying_ppt_ranges[ppt][1]):
-                                            min_age = max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt][0], key=f"entry_age_slider_{epic_key}_{ppt}", label_visibility="collapsed")
-                                        else:
-                                            min_age, max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}",
-                                                                label_visibility="collapsed")
-                                if enabled:
-                                    ppt_age_ranges[ppt] = (min_age, max_age)
-                                    ppt_enabled[ppt] = True
-                                else:
-                                    ppt_enabled[ppt] = False
-
-                            if is_selected and any(ppt_enabled.values()):
-                                selected_epics.append(epic_key)
                                 epic_counts[epic_key] = {
-                                    "ppt_age_ranges": ppt_age_ranges,
-                                    "ppt_enabled": ppt_enabled,
                                     "positive": num_positive_global,
-                                    "negative": num_negative_global
+                                    "negative": num_negative_global,
+                                    "payment_frequency_options": mapped_frequencies
                                 }
 
-                    elif epic_key == "PaymentFrequency":
-                        is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
-                        frequency_options = ["Annual", "Half-Yearly", "Quarterly", "Monthly", "Single Pay"]
-                        frequency_map = {"Annual": 1, "Half-Yearly": 2, "Quarterly": 3, "Monthly": 4, "Single Pay": 5}
-                        freq_cols = st.columns(len(frequency_options)+1)
-                        selected_frequencies = []
-                        for i, freq in enumerate(frequency_options):
-                            with freq_cols[i+1]:
-                                if st.checkbox(freq, value=is_selected, key=f"freq_cb_{freq}"):
-                                    selected_frequencies.append(freq)
+                        elif epic_key == "SumAssuredValidation":
+                            is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
+                            with st.expander("Show/Hide PPT Configuration", expanded=False):
 
-                        mapped_frequencies = [frequency_map[f] for f in selected_frequencies]
+                                header = st.columns([0.5, 2, 1, 1])
+                                # with header[0]: st.markdown("**Enable**")
+                                with header[1]: st.markdown("**PPT Type**")
+                                with header[2]: st.markdown("**Min**")
+                                with header[3]: st.markdown("**Max**")
 
-                        if is_selected:
-                            selected_epics.append(epic_key)
-                            epic_counts[epic_key] = {
-                                "positive": num_positive_global,
-                                "negative": num_negative_global,
-                                "payment_frequency_options": mapped_frequencies
-                            }
+                                row_sp = st.columns([0.5, 2, 1, 1])
+                                with row_sp[0]:
+                                    sp = st.checkbox("Enable", value=is_selected, key=f"sa_enabled_{epic_key}", label_visibility="collapsed")
+                                with row_sp[1]:
+                                    st.markdown("SinglePay")
+                                with row_sp[2]:
+                                    min_sp = st.number_input("Min SinglePay", min_value=0, value=sum_assured_ranges["Single Pay"][0], key=f"min_sp_{epic_key}", label_visibility="collapsed")
+                                with row_sp[3]:
+                                    max_sp = st.number_input("Max SinglePay", min_value=min_sp, value=sum_assured_ranges["Single Pay"][1], key=f"max_sp_{epic_key}", label_visibility="collapsed")
 
-                    elif epic_key == "SumAssuredValidation":
-                        is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
-                        with st.expander("Show/Hide PPT Configuration", expanded=False):
+                                row_oth = st.columns([0.5, 2, 1, 1])
+                                with row_oth[0]:
+                                    oth = st.checkbox("Enable", value=is_selected, key=f"oth_enabled_{epic_key}", label_visibility="collapsed")
+                                with row_oth[1]:
+                                    st.markdown("Others")
+                                with row_oth[2]:
+                                    min_oth = st.number_input("Min Others", min_value=0, value=sum_assured_ranges["Others"][0], key=f"min_oth_{epic_key}", label_visibility="collapsed")
+                                with row_oth[3]:
+                                    max_oth = st.number_input("Max Others", min_value=min_oth, value=sum_assured_ranges["Others"][1], key=f"max_oth_{epic_key}", label_visibility="collapsed")
 
-                            header = st.columns([0.5, 2, 1, 1])
-                            # with header[0]: st.markdown("**Enable**")
-                            with header[1]: st.markdown("**PPT Type**")
-                            with header[2]: st.markdown("**Min**")
-                            with header[3]: st.markdown("**Max**")
+                                if is_selected:
+                                    selected_epics.append(epic_key)
+                                    if epic_key not in epic_counts:
+                                        epic_counts[epic_key] = {}
+                                    if sp:
+                                        epic_counts[epic_key]["Single Pay"] = {
+                                            "min_val": min_sp,
+                                            "max_val": max_sp,
+                                            "positive": num_positive_global,
+                                            "negative": num_negative_global
+                                        }
+                                    if oth:
+                                        epic_counts[epic_key]["Others"] = {
+                                            "min_val": min_oth,
+                                            "max_val": max_oth,
+                                            "positive": num_positive_global,
+                                            "negative": num_negative_global
+                                        }
 
-                            row_sp = st.columns([0.5, 2, 1, 1])
-                            with row_sp[0]:
-                                sp = st.checkbox("Enable", value=is_selected, key=f"sa_enabled_{epic_key}", label_visibility="collapsed")
-                            with row_sp[1]:
-                                st.markdown("SinglePay")
-                            with row_sp[2]:
-                                min_sp = st.number_input("Min SinglePay", min_value=0, value=2500000, key=f"min_sp_{epic_key}", label_visibility="collapsed")
-                            with row_sp[3]:
-                                max_sp = st.number_input("Max SinglePay", min_value=min_sp, value=5000000, key=f"max_sp_{epic_key}", label_visibility="collapsed")
-
-                            row_oth = st.columns([0.5, 2, 1, 1])
-                            with row_oth[0]:
-                                oth = st.checkbox("Enable", value=is_selected, key=f"oth_enabled_{epic_key}", label_visibility="collapsed")
-                            with row_oth[1]:
-                                st.markdown("Others")
-                            with row_oth[2]:
-                                min_oth = st.number_input("Min Others", min_value=0, value=5000000, key=f"min_oth_{epic_key}", label_visibility="collapsed")
-
+                        else:
+                            is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
                             if is_selected:
                                 selected_epics.append(epic_key)
-                                if epic_key not in epic_counts:
-                                    epic_counts[epic_key] = {}
-                                if sp:
-                                    epic_counts[epic_key]["Single Pay"] = {
-                                        "min_val": min_sp,
-                                        "max_val": max_sp,
-                                        "positive": num_positive_global,
-                                        "negative": num_negative_global
-                                    }
-                                if oth:
-                                    epic_counts[epic_key]["Others"] = {
-                                        "min_val": min_oth,
-                                        "positive": num_positive_global,
-                                        "negative": num_negative_global
-                                    }
-
-                    else:
-                        is_selected = st.checkbox(epic_desc, value=select_all, key=f"epic_cb_{epic_key}")
-                        if is_selected:
-                            selected_epics.append(epic_key)
-                            epic_counts[epic_key] = {"positive": num_positive_global, "negative": num_negative_global}
+                                epic_counts[epic_key] = {"positive": num_positive_global, "negative": num_negative_global}
 
                 # print(epic_counts)
             # print("Epics Selected:", selected_epics, "\n")
@@ -513,314 +524,219 @@ if st.session_state.selected_module_name_py and st.session_state.generated_df is
 
             epic_map_rider = getattr(logic_module, 'EPIC_MAP_RIDER')
             select_all_rider = st.checkbox("Select/Deselect All Epics", value=True, key='select_all_epics_master_rider')
-            st.markdown("#### Configure Epics and Case Counts")
+            # st.markdown("#### Configure Epics and Case Counts")
             # st.markdown("---")
-            ppt_names = ["Single Pay", "Limited Pay (5 pay)", "Limited Pay (10 pay)", "Limited Pay (15 pay)", "Limited Pay (Pay till age 60)", "Regular Pay"]
-
-            for epic_key, epic_desc in epic_map_rider.items():
-                toggle_key = None
+            with st.expander("ℹ️ Configure Rider Epics and Case Counts", expanded=True):
                 ppt_names = ["Single Pay", "Limited Pay (5 pay)", "Limited Pay (10 pay)", "Limited Pay (15 pay)", "Limited Pay (Pay till age 60)", "Regular Pay"]
-                entry_age_ppt_ranges = {
-                    "Single Pay": (18, 65),
-                    "Limited Pay (5 pay)": (18, 65),
-                    "Limited Pay (10 pay)": (18, 65),
-                    "Limited Pay (15 pay)": (18, 65),
-                    "Limited Pay (Pay till age 60)": (18, 55),
-                    "Regular Pay": (18, 65)
-                }
-                policy_term_ppt_ranges = {
-                    "Single Pay": (1, 5),
-                    "Limited Pay (5 pay)": (10, 67),
-                    "Limited Pay (10 pay)": (15, 67),
-                    "Limited Pay (15 pay)": (20, 67),
-                    "Limited Pay (Pay till age 60)": (5, 67),
-                    "Regular Pay": (5, 67)
-                }
-                maturity_age_ppt_ranges = {
-                    "Single Pay": (19, 75),
-                    "Limited Pay (5 pay)": (19, 75),
-                    "Limited Pay (10 pay)": (19, 75),
-                    "Limited Pay (15 pay)": (19, 75),
-                    "Limited Pay (Pay till age 60)": (19, 75),
-                    "Regular Pay": (19, 75)
-                }
-                premium_paying_ppt_ranges = {
-                    "Single Pay": (1, 1),
-                    "Limited Pay (5 pay)": (5, 5),
-                    "Limited Pay (10 pay)": (10, 10),
-                    "Limited Pay (15 pay)": (15, 15),
-                    "Limited Pay (Pay till age 60)": (5, 42),
-                    "Regular Pay": (5, 67)
-                }
 
-                if count_mode == "Set Individual Counts for Each Epic":
-                    if epic_key == "EntryAge" or epic_key == "PremiumPayingTerm" or epic_key == "PolicyTerm" or epic_key == "MaturityAge":
+                for epic_key, epic_desc in epic_map_rider.items():
+                    toggle_key = None
+                    ppt_names = ["Single Pay", "Limited Pay (5 pay)", "Limited Pay (10 pay)", "Limited Pay (15 pay)", "Limited Pay (Pay till age 60)", "Regular Pay"]
+                    entry_age_ppt_ranges = {
+                        "Single Pay": (18, 65),
+                        "Limited Pay (5 pay)": (18, 65),
+                        "Limited Pay (10 pay)": (18, 65),
+                        "Limited Pay (15 pay)": (18, 65),
+                        "Limited Pay (Pay till age 60)": (18, 55),
+                        "Regular Pay": (18, 65)
+                    }
+                    policy_term_ppt_ranges = {
+                        "Single Pay": (1, 5),
+                        "Limited Pay (5 pay)": (10, 67),
+                        "Limited Pay (10 pay)": (15, 67),
+                        "Limited Pay (15 pay)": (20, 67),
+                        "Limited Pay (Pay till age 60)": (5, 67),
+                        "Regular Pay": (5, 67)
+                    }
+                    maturity_age_ppt_ranges = {
+                        "Single Pay": (23, 75),
+                        "Limited Pay (5 pay)": (23, 75),
+                        "Limited Pay (10 pay)": (23, 75),
+                        "Limited Pay (15 pay)": (23, 75),
+                        "Limited Pay (Pay till age 60)": (23, 75),
+                        "Regular Pay": (23, 75)
+                    }
+                    premium_paying_ppt_ranges = {
+                        "Single Pay": (1, 1),
+                        "Limited Pay (5 pay)": (5, 5),
+                        "Limited Pay (10 pay)": (10, 10),
+                        "Limited Pay (15 pay)": (15, 15),
+                        "Limited Pay (Pay till age 60)": (5, 42),
+                        "Regular Pay": (5, 67)
+                    }
+                    sum_assured_ranges = {
+                        "Single Pay": (250000, 3000000),
+                        "Others": (250000, 1000000),
+                    }
 
-                        is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
-                        with st.expander("Show/Hide PPT Configuration", expanded=False):
-                            ppt_age_ranges, ppt_pos_counts, ppt_neg_counts, ppt_enabled = {}, {}, {}, {}
+                    if count_mode == "Set Individual Counts for Each Epic":
+                        if epic_key == "EntryAge" or epic_key == "PremiumPayingTerm" or epic_key == "PolicyTerm" or epic_key == "MaturityAge":
 
-                            header = st.columns([0.5, 2, 2, 1, 1])
-                            # with header[0]: st.markdown("**Enable**")
-                            with header[1]: st.markdown("**PPT Name**")
-                            with header[2]: st.markdown("**Min/Max**")
-                            with header[3]: st.markdown("**Pos**")
-                            with header[4]: st.markdown("**Neg**")
+                            is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
+                            with st.expander("Show/Hide PPT Configuration", expanded=False):
+                                ppt_age_ranges, ppt_pos_counts, ppt_neg_counts, ppt_enabled = {}, {}, {}, {}
 
-                            for ppt in ppt_names:
-                                row = st.columns([0.5, 2, 2, 1, 1])
-                                with row[0]:
-                                    enabled = st.checkbox("Enable", value=is_selected, key=f"ppt_enabled_{epic_key}_{ppt}_rider", label_visibility="collapsed")
-                                with row[1]: st.markdown(ppt)
-                                with row[2]:
-                                    if(epic_key == "EntryAge"):
-                                        min_age, max_age = st.slider("Entry Age", 0, 85, entry_age_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider",
-                                                                label_visibility="collapsed")
-                                    elif(epic_key == "PolicyTerm"):
-                                        min_age, max_age = st.slider("Policy Term", 5, 80, policy_term_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider",
-                                                                label_visibility="collapsed")
-                                    elif(epic_key == "MaturityAge"):
-                                        min_age, max_age = st.slider("Maturity Age", 19, 75, maturity_age_ppt_ranges[ppt], key=f"maturity_age_slider_{epic_key}_{ppt}_rider",
-                                                                label_visibility="collapsed")
-                                    else:
-                                        if(premium_paying_ppt_ranges[ppt][0] == premium_paying_ppt_ranges[ppt][1]):
-                                            min_age = max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt][0], key=f"entry_age_slider_{epic_key}_{ppt}_rider", label_visibility="collapsed")
+                                header = st.columns([0.5, 2, 2, 1, 1])
+                                # with header[0]: st.markdown("**Enable**")
+                                with header[1]: st.markdown("**PPT Name**")
+                                with header[2]: st.markdown("**Min/Max**")
+                                with header[3]: st.markdown("**Pos**")
+                                with header[4]: st.markdown("**Neg**")
+
+                                for ppt in ppt_names:
+                                    row = st.columns([0.5, 2, 2, 1, 1])
+                                    with row[0]:
+                                        enabled = st.checkbox("Enable", value=is_selected, key=f"ppt_enabled_{epic_key}_{ppt}_rider", label_visibility="collapsed")
+                                    with row[1]: st.markdown(ppt)
+                                    with row[2]:
+                                        if(epic_key == "EntryAge"):
+                                            min_age, max_age = st.slider("Entry Age", 0, 85, entry_age_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider",
+                                                                    label_visibility="collapsed")
+                                        elif(epic_key == "PolicyTerm"):
+                                            min_age, max_age = st.slider("Policy Term", 5, 80, policy_term_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider",
+                                                                    label_visibility="collapsed")
+                                        elif(epic_key == "MaturityAge"):
+                                            min_age, max_age = st.slider("Maturity Age", 19, 75, maturity_age_ppt_ranges[ppt], key=f"maturity_age_slider_{epic_key}_{ppt}_rider",
+                                                                    label_visibility="collapsed")
                                         else:
-                                            min_age, max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider", label_visibility="collapsed")
-                                with row[3]:
-                                    pos = st.number_input("Pos", 0, value=5, key=f"epic_pos_{epic_key}_{ppt}_rider", label_visibility="collapsed")
-                                with row[4]:
-                                    neg = st.number_input("Neg", 0, value=5, key=f"epic_neg_{epic_key}_{ppt}_rider", label_visibility="collapsed")
+                                            if(premium_paying_ppt_ranges[ppt][0] == premium_paying_ppt_ranges[ppt][1]):
+                                                min_age = max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt][0], key=f"entry_age_slider_{epic_key}_{ppt}_rider", label_visibility="collapsed")
+                                            else:
+                                                min_age, max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider", label_visibility="collapsed")
+                                    with row[3]:
+                                        pos = st.number_input("Pos", 0, value=5, key=f"epic_pos_{epic_key}_{ppt}_rider", label_visibility="collapsed")
+                                    with row[4]:
+                                        neg = st.number_input("Neg", 0, value=5, key=f"epic_neg_{epic_key}_{ppt}_rider", label_visibility="collapsed")
 
-                                if enabled:
-                                    ppt_age_ranges[ppt] = (min_age, max_age)
-                                    ppt_pos_counts[ppt] = pos
-                                    ppt_neg_counts[ppt] = neg
-                                    ppt_enabled[ppt] = True
-                                else:
-                                    ppt_enabled[ppt] = False
+                                    if enabled:
+                                        ppt_age_ranges[ppt] = (min_age, max_age)
+                                        ppt_pos_counts[ppt] = pos
+                                        ppt_neg_counts[ppt] = neg
+                                        ppt_enabled[ppt] = True
+                                    else:
+                                        ppt_enabled[ppt] = False
 
-                            if is_selected and any(ppt_enabled.values()):
+                                if is_selected and any(ppt_enabled.values()):
+                                    selected_epics_rider.append(epic_key)
+                                    epic_counts_rider[epic_key] = {
+                                        "ppt_age_ranges": ppt_age_ranges,
+                                        "ppt_pos_counts": ppt_pos_counts,
+                                        "ppt_neg_counts": ppt_neg_counts,
+                                        "ppt_enabled": ppt_enabled
+                                    }
+                        
+                        elif epic_key == "PaymentFrequency":
+                            row = st.columns([2, 1.5, 1.5])
+                            with row[0]:        
+                                is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
+                            with row[1]:
+                                pos_count = st.number_input(f"Pos {epic_key}", min_value=0, value=5, key=f"epic_pos_{epic_key}_rider", label_visibility="collapsed", placeholder="Pos")
+                            with row[2]:
+                                neg_count = st.number_input(f"Neg {epic_key}", min_value=0, value=5, key=f"epic_neg_{epic_key}_rider", label_visibility="collapsed", placeholder="Neg")
+
+                            frequency_options = ["Annual", "Half-Yearly", "Quarterly", "Monthly", "Single Pay"]
+                            frequency_map = {"Annual": 1, "Half-Yearly": 2, "Quarterly": 3, "Monthly": 4, "Single Pay": 5}
+                            freq_cols = st.columns(len(frequency_options)+1)
+                            selected_frequencies = []
+                            for i, freq in enumerate(frequency_options):
+                                with freq_cols[i+1]:
+                                    if st.checkbox(freq, value=is_selected, key=f"freq_cb_{freq}_rider"):
+                                        selected_frequencies.append(freq)
+
+                            mapped_frequencies = [frequency_map[f] for f in selected_frequencies]
+
+                            if is_selected:
                                 selected_epics_rider.append(epic_key)
                                 epic_counts_rider[epic_key] = {
-                                    "ppt_age_ranges": ppt_age_ranges,
-                                    "ppt_pos_counts": ppt_pos_counts,
-                                    "ppt_neg_counts": ppt_neg_counts,
-                                    "ppt_enabled": ppt_enabled
+                                    "positive": pos_count,
+                                    "negative": neg_count,
+                                    "payment_frequency_options": mapped_frequencies
                                 }
-                    
-                    elif epic_key == "PaymentFrequency":
-                        row = st.columns([2, 1.5, 1.5])
-                        with row[0]:        
-                            is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
-                        with row[1]:
-                            pos_count = st.number_input(f"Pos {epic_key}", min_value=0, value=5, key=f"epic_pos_{epic_key}_rider", label_visibility="collapsed", placeholder="Pos")
-                        with row[2]:
-                            neg_count = st.number_input(f"Neg {epic_key}", min_value=0, value=5, key=f"epic_neg_{epic_key}_rider", label_visibility="collapsed", placeholder="Neg")
 
-                        frequency_options = ["Annual", "Half-Yearly", "Quarterly", "Monthly", "Single Pay"]
-                        frequency_map = {"Annual": 1, "Half-Yearly": 2, "Quarterly": 3, "Monthly": 4, "Single Pay": 5}
-                        freq_cols = st.columns(len(frequency_options)+1)
-                        selected_frequencies = []
-                        for i, freq in enumerate(frequency_options):
-                            with freq_cols[i+1]:
-                                if st.checkbox(freq, value=is_selected, key=f"freq_cb_{freq}_rider"):
-                                    selected_frequencies.append(freq)
-
-                        mapped_frequencies = [frequency_map[f] for f in selected_frequencies]
-
-                        if is_selected:
-                            selected_epics.append(epic_key)
-                            epic_counts[epic_key] = {
-                                "positive": pos_count,
-                                "negative": neg_count,
-                                "payment_frequency_options": mapped_frequencies
-                            }
-                    # elif epic_key == "SumAssuredValidation":
-                    #     is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
-                    #     with st.expander("Show/Hide PPT Configuration", expanded=False):
-
-                    #         header = st.columns([0.5, 2, 1, 1, 1, 1])
-                    #         # with header[0]: st.markdown("**Enable**")
-                    #         with header[1]: st.markdown("**PPT Type**")
-                    #         with header[2]: st.markdown("**Min**")
-                    #         with header[3]: st.markdown("**Max**")
-                    #         with header[4]: st.markdown("**Pos**")
-                    #         with header[5]: st.markdown("**Neg**")
-
-                    #         row_sp = st.columns([0.5, 2, 1, 1, 1, 1])
-                    #         with row_sp[0]:
-                    #             sp = st.checkbox("Enable", value=is_selected, key=f"sa_enabled_{epic_key}_rider", label_visibility="collapsed")
-                    #         with row_sp[1]:
-                    #             st.markdown("SinglePay")
-                    #         with row_sp[2]:
-                    #             min_sp = st.number_input("Min SinglePay", min_value=0, value=2500000, key=f"min_sp_{epic_key}_rider", label_visibility="collapsed")
-                    #         with row_sp[3]:
-                    #             max_sp = st.number_input("Max SinglePay", min_value=min_sp, value=5000000, key=f"max_sp_{epic_key}_rider", label_visibility="collapsed")
-                    #         with row_sp[4]:
-                    #             pos_sp = st.number_input("Pos SinglePay", min_value=0, value=5, key=f"pos_sp_{epic_key}_rider", label_visibility="collapsed")
-                    #         with row_sp[5]:
-                    #             neg_sp = st.number_input("Neg SinglePay", min_value=0, value=5, key=f"neg_sp_{epic_key}_rider", label_visibility="collapsed")
-
-                    #         row_oth = st.columns([0.5, 2, 1, 1, 1, 1])
-                    #         with row_oth[0]:
-                    #             oth = st.checkbox("Enable", value=is_selected, key=f"oth_enabled_{epic_key}_rider", label_visibility="collapsed")
-                    #         with row_oth[1]:
-                    #             st.markdown("Others")
-                    #         with row_oth[2]:
-                    #             min_oth = st.number_input("Min Others", min_value=0, value=5000000, key=f"min_oth_{epic_key}_rider", label_visibility="collapsed")
-                    #         with row_oth[4]:
-                    #             pos_oth = st.number_input("Pos Others", min_value=0, value=5, key=f"pos_oth_{epic_key}_rider", label_visibility="collapsed")
-                    #         with row_oth[5]:
-                    #             neg_oth = st.number_input("Neg Others", min_value=0, value=5, key=f"neg_oth_{epic_key}_rider", label_visibility="collapsed")
-
-                    #         if is_selected:
-                    #             selected_epics_rider.append(epic_key)
-                    #             if epic_key not in epic_counts_rider:
-                    #                 epic_counts_rider[epic_key] = {}
-                    #             if sp:
-                    #                 epic_counts_rider[epic_key]["Single Pay"] = {
-                    #                     "min_val": min_sp,
-                    #                     "max_val": max_sp,
-                    #                     "positive": num_positive_global,
-                    #                     "negative": num_negative_global
-                    #                 }
-                    #             if oth:
-                    #                 epic_counts_rider[epic_key]["Others"] = {
-                    #                     "min_val": min_oth,
-                    #                     "positive": num_positive_global,
-                    #                     "negative": num_negative_global
-                    #                 }
-
-                    else:
-                        # For other epics, use slider for min/max and number inputs for pos/neg
-                        row = st.columns([2, 1.5, 1.5])
-                        with row[0]:        
-                            is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
-                        with row[1]:
-                            pos_count = st.number_input(f"Pos {epic_key}", min_value=0, value=5, key=f"epic_pos_{epic_key}_rider", label_visibility="collapsed", placeholder="Pos")
-                        with row[2]:
-                            neg_count = st.number_input(f"Neg {epic_key}", min_value=0, value=5, key=f"epic_neg_{epic_key}_rider", label_visibility="collapsed", placeholder="Neg")
-                        if is_selected:
-                            selected_epics_rider.append(epic_key)
-                            epic_counts_rider[epic_key] = {
-                                "positive": pos_count,
-                                "negative": neg_count
-                            }
-
-                else:  # Apply Same Count to All Epics
-                    if epic_key == "EntryAge" or epic_key == "PremiumPayingTerm" or epic_key == "PolicyTerm" or epic_key == "MaturityAge":
-
-                        is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
-                        with st.expander("Show/Hide PPT Configuration", expanded=False):
-                            ppt_age_ranges, ppt_enabled = {}, {}
-
-                            for ppt in ppt_names:
-                                row = st.columns([0.5, 2, 2])
-                                with row[0]:
-                                    enabled = st.checkbox("Enable", value=is_selected, key=f"ppt_enabled_all_{epic_key}_{ppt}_rider", label_visibility="collapsed")
-                                with row[1]: st.markdown(ppt)
-                                with row[2]:
-                                    if(epic_key == "EntryAge"):
-                                        min_age, max_age = st.slider("Entry Age", 0, 85, entry_age_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider",
-                                                                label_visibility="collapsed")
-                                    elif(epic_key == "PolicyTerm"):
-                                        min_age, max_age = st.slider("Policy Term", 5, 80, policy_term_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider",
-                                                                label_visibility="collapsed")
-                                    elif(epic_key == "MaturityAge"):
-                                        min_age, max_age = st.slider("Maturity Age", 19, 75, maturity_age_ppt_ranges[ppt], key=f"maturity_age_slider_{epic_key}_{ppt}_rider",
-                                                                label_visibility="collapsed")
-                                    else:
-                                        if(premium_paying_ppt_ranges[ppt][0] == premium_paying_ppt_ranges[ppt][1]):
-                                            min_age = max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt][0], key=f"entry_age_slider_{epic_key}_{ppt}_rider", label_visibility="collapsed")
-                                        else:
-                                            min_age, max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider", label_visibility="collapsed")
-                                if enabled:
-                                    ppt_age_ranges[ppt] = (min_age, max_age)
-                                    ppt_enabled[ppt] = True
-                                else:
-                                    ppt_enabled[ppt] = False
-
-                            if is_selected and any(ppt_enabled.values()):
+                        else:
+                            # For other epics, use slider for min/max and number inputs for pos/neg
+                            row = st.columns([2, 1.5, 1.5])
+                            with row[0]:        
+                                is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
+                            with row[1]:
+                                pos_count = st.number_input(f"Pos {epic_key}", min_value=0, value=5, key=f"epic_pos_{epic_key}_rider", label_visibility="collapsed", placeholder="Pos")
+                            with row[2]:
+                                neg_count = st.number_input(f"Neg {epic_key}", min_value=0, value=5, key=f"epic_neg_{epic_key}_rider", label_visibility="collapsed", placeholder="Neg")
+                            if is_selected:
                                 selected_epics_rider.append(epic_key)
                                 epic_counts_rider[epic_key] = {
-                                    "ppt_age_ranges": ppt_age_ranges,
-                                    "ppt_enabled": ppt_enabled,
+                                    "positive": pos_count,
+                                    "negative": neg_count
+                                }
+
+                    else:  # Apply Same Count to All Epics
+                        if epic_key == "EntryAge" or epic_key == "PremiumPayingTerm" or epic_key == "PolicyTerm" or epic_key == "MaturityAge":
+
+                            is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
+                            with st.expander("Show/Hide PPT Configuration", expanded=False):
+                                ppt_age_ranges, ppt_enabled = {}, {}
+
+                                for ppt in ppt_names:
+                                    row = st.columns([0.5, 2, 2])
+                                    with row[0]:
+                                        enabled = st.checkbox("Enable", value=is_selected, key=f"ppt_enabled_all_{epic_key}_{ppt}_rider", label_visibility="collapsed")
+                                    with row[1]: st.markdown(ppt)
+                                    with row[2]:
+                                        if(epic_key == "EntryAge"):
+                                            min_age, max_age = st.slider("Entry Age", 0, 85, entry_age_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider",
+                                                                    label_visibility="collapsed")
+                                        elif(epic_key == "PolicyTerm"):
+                                            min_age, max_age = st.slider("Policy Term", 5, 80, policy_term_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider",
+                                                                    label_visibility="collapsed")
+                                        elif(epic_key == "MaturityAge"):
+                                            min_age, max_age = st.slider("Maturity Age", 19, 75, maturity_age_ppt_ranges[ppt], key=f"maturity_age_slider_{epic_key}_{ppt}_rider",
+                                                                    label_visibility="collapsed")
+                                        else:
+                                            if(premium_paying_ppt_ranges[ppt][0] == premium_paying_ppt_ranges[ppt][1]):
+                                                min_age = max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt][0], key=f"entry_age_slider_{epic_key}_{ppt}_rider", label_visibility="collapsed")
+                                            else:
+                                                min_age, max_age = st.slider("Entry Age", 0, 85, premium_paying_ppt_ranges[ppt], key=f"entry_age_slider_{epic_key}_{ppt}_rider", label_visibility="collapsed")
+                                    if enabled:
+                                        ppt_age_ranges[ppt] = (min_age, max_age)
+                                        ppt_enabled[ppt] = True
+                                    else:
+                                        ppt_enabled[ppt] = False
+
+                                if is_selected and any(ppt_enabled.values()):
+                                    selected_epics_rider.append(epic_key)
+                                    epic_counts_rider[epic_key] = {
+                                        "ppt_age_ranges": ppt_age_ranges,
+                                        "ppt_enabled": ppt_enabled,
+                                        "positive": num_positive_global,
+                                        "negative": num_negative_global
+                                    }
+
+                        elif epic_key == "PaymentFrequency":        
+                            is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
+                            frequency_options = ["Annual", "Half-Yearly", "Quarterly", "Monthly", "Single Pay"]
+                            frequency_map = {"Annual": 1, "Half-Yearly": 2, "Quarterly": 3, "Monthly": 4, "Single Pay": 5}
+                            freq_cols = st.columns(len(frequency_options)+1)
+                            selected_frequencies = []
+                            for i, freq in enumerate(frequency_options):
+                                with freq_cols[i+1]:
+                                    if st.checkbox(freq, value=is_selected, key=f"freq_cb_{freq}_rider"):
+                                        selected_frequencies.append(freq)
+
+                            mapped_frequencies = [frequency_map[f] for f in selected_frequencies]
+
+                            if is_selected:
+                                selected_epics_rider.append(epic_key)
+                                epic_counts_rider[epic_key] = {
                                     "positive": num_positive_global,
-                                    "negative": num_negative_global
+                                    "negative": num_negative_global,
+                                    "payment_frequency_options": mapped_frequencies
                                 }
 
-                    elif epic_key == "PaymentFrequency":        
-                        is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
-                        frequency_options = ["Annual", "Half-Yearly", "Quarterly", "Monthly", "Single Pay"]
-                        frequency_map = {"Annual": 1, "Half-Yearly": 2, "Quarterly": 3, "Monthly": 4, "Single Pay": 5}
-                        freq_cols = st.columns(len(frequency_options)+1)
-                        selected_frequencies = []
-                        for i, freq in enumerate(frequency_options):
-                            with freq_cols[i+1]:
-                                if st.checkbox(freq, value=is_selected, key=f"freq_cb_{freq}_rider"):
-                                    selected_frequencies.append(freq)
-
-                        mapped_frequencies = [frequency_map[f] for f in selected_frequencies]
-
-                        if is_selected:
-                            selected_epics.append(epic_key)
-                            epic_counts[epic_key] = {
-                                "positive": num_positive_global,
-                                "negative": num_negative_global,
-                                "payment_frequency_options": mapped_frequencies
-                            }
-                    # elif epic_key == "SumAssuredValidation":
-                    #     is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
-                    #     with st.expander("Show/Hide PPT Configuration", expanded=False):
-
-                    #         header = st.columns([0.5, 2, 1, 1])
-                    #         # with header[0]: st.markdown("**Enable**")
-                    #         with header[1]: st.markdown("**PPT Type**")
-                    #         with header[2]: st.markdown("**Min**")
-                    #         with header[3]: st.markdown("**Max**")
-
-                    #         row_sp = st.columns([0.5, 2, 1, 1])
-                    #         with row_sp[0]:
-                    #             sp = st.checkbox("Enable", value=is_selected, key=f"sa_enabled_{epic_key}_rider", label_visibility="collapsed")
-                    #         with row_sp[1]:
-                    #             st.markdown("SinglePay")
-                    #         with row_sp[2]:
-                    #             min_sp = st.number_input("Min SinglePay", min_value=0, value=2500000, key=f"min_sp_{epic_key}_rider", label_visibility="collapsed")
-                    #         with row_sp[3]:
-                    #             max_sp = st.number_input("Max SinglePay", min_value=min_sp, value=5000000, key=f"max_sp_{epic_key}_rider", label_visibility="collapsed")
-
-                    #         row_oth = st.columns([0.5, 2, 1, 1])
-                    #         with row_oth[0]:
-                    #             oth = st.checkbox("Enable", value=is_selected, key=f"oth_enabled_{epic_key}_rider", label_visibility="collapsed")
-                    #         with row_oth[1]:
-                    #             st.markdown("Others")
-                    #         with row_oth[2]:
-                    #             min_oth = st.number_input("Min Others", min_value=0, value=5000000, key=f"min_oth_{epic_key}_rider", label_visibility="collapsed")
-
-                    #         if is_selected:
-                    #             selected_epics_rider.append(epic_key)
-                    #             if epic_key not in epic_counts_rider:
-                    #                 epic_counts_rider[epic_key] = {}
-                    #             if sp:
-                    #                 epic_counts_rider[epic_key]["Single Pay"] = {
-                    #                     "min_val": min_sp,
-                    #                     "max_val": max_sp,
-                    #                     "positive": num_positive_global,
-                    #                     "negative": num_negative_global
-                    #                 }
-                    #             if oth:
-                    #                 epic_counts_rider[epic_key]["Others"] = {
-                    #                     "min_val": min_oth,
-                    #                     "positive": num_positive_global,
-                    #                     "negative": num_negative_global
-                    #                 }
-
-                    else:
-                        is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
-                        if is_selected:
-                            selected_epics_rider.append(epic_key)
-                            epic_counts_rider[epic_key] = {"positive": num_positive_global, "negative": num_negative_global}
+                        else:
+                            is_selected = st.checkbox(epic_desc, value=select_all_rider, key=f"epic_cb_{epic_key}_rider")
+                            if is_selected:
+                                selected_epics_rider.append(epic_key)
+                                epic_counts_rider[epic_key] = {"positive": num_positive_global, "negative": num_negative_global}
 
                 # print(epic_counts_rider)
             # print("Rider Epics Selected:", selected_epics_rider)
@@ -926,7 +842,3 @@ elif not st.session_state.selected_module_name_py:
 
 else: 
     st.info(f"ℹ️ Configure your test run, then click 'Generate Test Cases' in the sidebar.")
-
-
-# To Do List:
-# - [x] Add support for rider epics "keys" // done
