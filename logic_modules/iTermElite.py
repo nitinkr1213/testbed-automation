@@ -34,8 +34,8 @@ PAYMENT_FREQUENCY = [1, 2, 3, 4, 5] # Annual, Half-Yearly, Quarterly, Monthly, S
 PAYMENT_FREQUENCY_STR = {1: 'Annual', 2: 'Half-Yearly', 3: 'Quarterly', 4: 'Monthly', 5: 'Single'}
 
 MODULE_NAME = "iTerm Elite" 
-API_MODE_VALUE = "Elite plan" 
-API_MODE_VALUE_RIDER = "Elite Plan + AD"
+API_MODE_VALUE = "Base plan" 
+API_MODE_VALUE_RIDER = "Base Plan + AD"
 
 INCEPTION_DATE_VALUE = "1/Sept/2025" #can be changed to current date
 EXECUTE_VALUE = "N"
@@ -135,8 +135,7 @@ column_order = [
 ]
 
 # Discount and sum assured calculation based on PPT type
-def calculate_discounts(ppt_type):
-    PPT_RULES_TT2 = {
+PPT_RULES_TT2 = {
         "Single Pay": (2500000, 5000000),
         "Limited Pay (5 pay)": (5000000, 20000000),
         "Limited Pay (10 pay)": (5000000, 20000000),
@@ -144,6 +143,7 @@ def calculate_discounts(ppt_type):
         "Limited Pay (Pay till age 60)": (5000000, 20000000),
         "Regular Pay": (5000000, 20000000)
     }
+def calculate_discounts(ppt_type):
 
     min_sa, max_sa = PPT_RULES_TT2[ppt_type]
     sum_assured = random.randint(min_sa, max_sa)
@@ -216,7 +216,7 @@ PPT_RULES = {
     },
     "Regular Pay": {
         "entry_age_range": (18, 65),
-        "charge_year": lambda age: random.randint(5, 67),
+        "charge_year": lambda age: random.randint(5, 85 - age),
         "charge_year_range": (5, 67),
         "coverage_year_range": lambda age: (5, 85 - age),
         "maturity_year": lambda age, coverage_year: age + coverage_year,
@@ -228,30 +228,12 @@ PPT_RULES_RIDER = {
     "Rider AD": {
         "entry_age_range": (18, 65),
         "charge_year": lambda age: random.randint(5, 57),
-        "coverage_year_range": lambda age: (5, 57), # no need as pt=ppt
+        "coverage_year_range": lambda age: (5, 57),
         "maturity_year": lambda age, coverage_year: age + coverage_year,
         "maturity_age_range": (23, 75),
         "sum_assured_range": (25000, 10000000)
     },
 }
-
-
-def prepare_ppt_rules_with_overrides(base_rules, overrides):
-    """Return a new PPT rules dict that applies lightweight overrides.
-
-    Only the PPT entries that are overridden are shallow-copied and modified.
-    This avoids deepcopying the whole rules structure when only a few fields
-    (like entry_age_range) need to change.
-    """
-    new_rules = base_rules.copy()
-    for ppt_name, changes in (overrides or {}).items():
-        if ppt_name in new_rules:
-            # shallow copy the inner dict to avoid mutating the original
-            new_rules[ppt_name] = new_rules[ppt_name].copy()
-            for k, v in changes.items():
-                new_rules[ppt_name][k] = v
-    return new_rules
-
 
 def get_rider_years(ppt_name, age, PPT_RULES=PPT_RULES_RIDER):
     rule = PPT_RULES.get(ppt_name)
@@ -269,22 +251,23 @@ def get_rider_years(ppt_name, age, PPT_RULES=PPT_RULES_RIDER):
 def get_years(ppt_name, age, PPT_RULES=PPT_RULES):
     rule = PPT_RULES.get(ppt_name)
     charge_year = rule.get('charge_year_override', rule['charge_year'](age))
+    charge_year_max = 85-age # improve this logic later
+    if charge_year > charge_year_max:
+        charge_year = charge_year_max
     # Determine coverage year range
     if ppt_name == "Limited Pay (Pay till age 60)":
         coverage_min, coverage_max = rule['coverage_year_range'](age, charge_year)
     else:
         coverage_min, coverage_max = rule['coverage_year_range'](age)
-    # Enforce minimum 5-year gap for Limited Pay plans
-    if "Limited Pay" in ppt_name:
-        coverage_min = max(coverage_min, charge_year + 5)
+    coverage_max = min(coverage_max, 85 - age)
     # Ensure valid range
     if coverage_min > coverage_max:
         coverage_year = coverage_min
     else:
         coverage_year = random.randint(coverage_min, coverage_max)
+    # if ppt_name == "Regular Pay":
+    #     coverage_year = charge_year
     maturity_year = rule['maturity_year'](age, coverage_year)
-    if ppt_name == "Regular Pay":
-        coverage_year = charge_year
     return charge_year, coverage_year, maturity_year
 
 def get_out_of_range_coverage(ppt_name, age, PPT_RULES=PPT_RULES):
@@ -295,9 +278,7 @@ def get_out_of_range_coverage(ppt_name, age, PPT_RULES=PPT_RULES):
         coverage_min, coverage_max = rule['coverage_year_range'](age, charge_year)
     else:
         coverage_min, coverage_max = rule['coverage_year_range'](age)
-    # Enforce minimum 5-year gap for Limited Pay plans
-    if "Limited Pay" in ppt_name:
-        coverage_min = max(coverage_min, charge_year + 5)
+
     # Force an out-of-range coverage year
     coverage_year = coverage_max + 1 if ppt_name == "Single Pay" or not random.choice([True, False]) else coverage_min - 1
     maturity_year = rule['maturity_year'](age, coverage_year)
@@ -312,9 +293,7 @@ def get_out_of_range_maturity_year(ppt_name, age, PPT_RULES=PPT_RULES):
         coverage_min, coverage_max = rule['coverage_year_range'](age, charge_year)
     else:
         coverage_min, coverage_max = rule['coverage_year_range'](age)
-    # Enforce minimum 5-year gap for Limited Pay plans
-    if "Limited Pay" in ppt_name:
-        coverage_min = max(coverage_min, charge_year + 5)
+
     # --Can add below value for single pay--
     coverage_year = maturity_max - age + random.randint(1,5)
     maturity_year = rule['maturity_year'](age, coverage_year)
@@ -337,9 +316,7 @@ def get_out_of_range_charge_year(ppt_name, age, PPT_RULES=PPT_RULES):
         coverage_min, coverage_max = rule['coverage_year_range'](age, charge_year_out)
     else:
         coverage_min, coverage_max = rule['coverage_year_range'](age)
-    # Enforce minimum 5-year gap for Limited Pay plans
-    if "Limited Pay" in ppt_name:
-        coverage_min = max(coverage_min, charge_year_out + 5)
+
     # Pick a valid coverage year within range
     coverage_year = coverage_min if coverage_min <= coverage_max else coverage_max
     maturity_year = rule['maturity_year'](age, coverage_year)
@@ -347,7 +324,7 @@ def get_out_of_range_charge_year(ppt_name, age, PPT_RULES=PPT_RULES):
     return charge_year_out, coverage_year, maturity_year
 
 
-def build_common_row(tuid_counter, module_name, api_operation, ppt_name, scenario_text, test_type,
+def build_common_row(tuid_counter, module_name, api_operation, checking_note, ppt_name, scenario_text, test_type,
                      expected_result, inception_date, policy_loc, insurer_loc, birth_year,
                      age, gender, smoking, medical_indi, product_code,
                      coverage_year, charge_year, maturity_year, payment_freq, discount_info,
@@ -358,7 +335,7 @@ def build_common_row(tuid_counter, module_name, api_operation, ppt_name, scenari
         'TUID': f'TC_{module_name}_{tuid_counter:03d}',
         'API_Mode': API_MODE_VALUE,
         'API_Operation': api_operation,
-        'Checking_Note': CHECKING_NOTE_CREATE_VALUE if test_type == 'Positive' else CHECKING_NOTE_UPDATE_VALUE,
+        'Checking_Note': checking_note,
         'Test Scenario': scenario_text,
         'Test_Type': test_type,
         'Expected_Result': expected_result,
@@ -411,6 +388,94 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
     current_year = date.today().year
 
     print("#"*50,"\n\niTerm Elite N logic module")
+    # Apply any PPT-related overrides provided by the UI/config (mutate PPT_RULES in-place)
+    def update_ppt_rules_with_epic_counts(epic_counts_local, epic_counts_rider_local=None):
+        """Mutate PPT_RULES and PPT_RULES_RIDER according to epic_counts structures.
+
+        This updates entry_age_range, maturity_age_range, charge_year/charge_year_range,
+        and coverage_year_range where provided so subsequent get_years()/rider helpers
+        use the user-supplied values without copying PPT_RULES.
+        """
+        if not epic_counts_local:
+            return
+        # Helper to set a coverage_year_range that accepts either (age) or (age, charge_year)
+        def make_coverage_func(tpl):
+            return (lambda age, charge_year=None, _tpl=tpl: (_tpl[0], _tpl[1]))
+
+        # EntryAge overrides
+        entry_conf = epic_counts_local.get('EntryAge', {})
+        for ppt_name, (min_age, max_age) in entry_conf.get('ppt_age_ranges', {}).items():
+            if ppt_name in PPT_RULES:
+                PPT_RULES[ppt_name]['entry_age_range'] = (min_age, max_age)
+
+        # PolicyTerm / coverage_year overrides
+        policy_conf = epic_counts_local.get('PolicyTerm', {})
+        for ppt_name, (min_cov, max_cov) in policy_conf.get('ppt_age_ranges', {}).items():
+            if ppt_name in PPT_RULES:
+                if ppt_name == "Limited Pay (Pay till age 60)":
+                    continue  # skip special case for now
+                PPT_RULES[ppt_name]['coverage_year_range'] = make_coverage_func((min_cov, max_cov))
+
+        # MaturityAge overrides
+        maturity_conf = epic_counts_local.get('MaturityAge', {})
+        for ppt_name, (min_mat, max_mat) in maturity_conf.get('ppt_age_ranges', {}).items():
+            if ppt_name in PPT_RULES:
+                PPT_RULES[ppt_name]['maturity_age_range'] = (min_mat, max_mat)
+
+        # PremiumPayingTerm overrides - interpret provided ppt_age_ranges as either fixed charge year or a range
+        ppt_conf = epic_counts_local.get('PremiumPayingTerm', {})
+        for ppt_name, val in ppt_conf.get('ppt_age_ranges', {}).items():
+            if ppt_name == "Limited Pay (Pay till age 60)":
+                continue  # skip special case for now
+            if ppt_name not in PPT_RULES:
+                continue
+            # Expect val to be a tuple (min_val, max_val)
+            try:
+                a, b = val
+            except Exception:
+                continue
+            if a == b:
+                # fixed charge year
+                PPT_RULES[ppt_name]['charge_year_override'] = a
+            else:
+                PPT_RULES[ppt_name]['charge_year_range'] = (a, b)
+                PPT_RULES[ppt_name]['charge_year'] = (lambda age, r=(a, b): random.randint(r[0], r[1]))
+
+        # SumAssuredValidation overrides
+        sum_assured_conf = epic_counts_local.get('SumAssuredValidation', {})
+        print("SumAssuredValidation overrides:", sum_assured_conf)
+        # for ppt_name, (min_sa, max_sa) in sum_assured_conf.get('ppt_age_ranges', {}).items():
+        min_sa, max_sa = sum_assured_conf.get("Single Pay", {}).get('min_val'), sum_assured_conf.get("Single Pay", {}).get('max_val')
+        if max_sa is not None or min_sa is not None:
+            PPT_RULES_TT2["Single Pay"] = (min_sa, max_sa)
+
+        min_sa = sum_assured_conf.get("Others", {}).get('min_val')
+        max_sa = sum_assured_conf.get("Others", {}).get('max_val')
+        if max_sa is not None or min_sa is not None:
+            PPT_RULES_TT2["Limited Pay (5 pay)"] = (min_sa, max_sa)
+            PPT_RULES_TT2["Limited Pay (10 pay)"] = (min_sa, max_sa)
+            PPT_RULES_TT2["Limited Pay (15 pay)"] = (min_sa, max_sa)
+            PPT_RULES_TT2["Limited Pay (Pay till age 60)"] = (min_sa, max_sa)
+            PPT_RULES_TT2["Regular Pay"] = (min_sa, max_sa)
+
+        # Rider overrides (if any)
+        if epic_counts_rider_local:
+            entry_conf_r = epic_counts_rider_local.get('EntryAge', {})
+            for ppt_name, (min_age, max_age) in entry_conf_r.get('ppt_age_ranges', {}).items():
+                if ppt_name in PPT_RULES_RIDER:
+                    PPT_RULES_RIDER[ppt_name]['entry_age_range'] = (min_age, max_age)
+            # Rider maturity / coverage overrides
+            maturity_conf_r = epic_counts_rider_local.get('MaturityAge', {})
+            for ppt_name, (min_mat, max_mat) in maturity_conf_r.get('ppt_age_ranges', {}).items():
+                if ppt_name in PPT_RULES_RIDER:
+                    PPT_RULES_RIDER[ppt_name]['maturity_age_range'] = (min_mat, max_mat)
+
+    # apply overrides in-place before generation
+    try:
+        update_ppt_rules_with_epic_counts(epic_counts or {}, epic_counts_rider or {})
+    except Exception:
+        # if anything goes wrong during applying user overrides, ensure generation continues with original rules
+        logging.exception('Failed to apply PPT_RULES overrides from epic_counts')
 
     common_data = {
                 'ComprehensiveCareB6': 'No',
@@ -442,7 +507,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 'KeyMan': 'No',
                 "relationToHolder": 'SELF',
                 'Difference_Value': ''}
-
+    
     # --- EPIC: EntryAge ---
     if 'EntryAge' in selected_epics:
         target_rule = 'EntryAge'
@@ -450,11 +515,8 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
         ppt_age_ranges = entry_age_config.get('ppt_age_ranges', {})
         ppt_pos_counts = entry_age_config.get('ppt_pos_counts', {})
         ppt_neg_counts = entry_age_config.get('ppt_neg_counts', {})
-        # Update PPT_RULES entry_age_range for each PPT if provided
-        # Prepare a PPT rules mapping that only overrides entry_age_range for specified PPTs
-        overrides = {ppt_name: {'entry_age_range': (min_age, max_age)} for ppt_name, (min_age, max_age) in ppt_age_ranges.items()}
-        entryage_ppt_rules = prepare_ppt_rules_with_overrides(PPT_RULES, overrides)
 
+        entryage_ppt_rules = PPT_RULES
         # If any PPT has a nonzero pos/neg count, treat as per-PPT mode
         per_ppt_mode = any(int(ppt_pos_counts.get(ppt, 0)) > 0 or int(ppt_neg_counts.get(ppt, 0)) > 0 for ppt in PPT_NAME) # for different count mode
         ppt_enabled = entry_age_config.get('ppt_enabled', {}) # for same count mode
@@ -474,8 +536,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter += 1
                 idx = random.randint(0, 2)
                 positive_age = max(min_entry_age, min(max_entry_age - i, max_entry_age)) if i % 2 == 0 else min(max_entry_age, min_entry_age + i)
-                # if ppt_name == "Limited Pay (Pay till age 60)" and positive_age >= 55:
-                #     positive_age = 54
+
                 charge_year, coverage_year, maturity_year = get_years(ppt_name, positive_age, entryage_ppt_rules)
                 discount_info = calculate_discounts(ppt_name)
                 payment_freq = random.choice(PAYMENT_FREQUENCY)
@@ -487,6 +548,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     get_api_operation(target_rule),
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, min_entry_age, max_entry_age),
                     'Positive',
@@ -529,6 +591,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     get_api_operation(target_rule),
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, min_entry_age, max_entry_age),
                     'Negative',
@@ -559,19 +622,13 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
         ppt_age_ranges = policy_term_config.get('ppt_age_ranges', {})
         ppt_pos_counts = policy_term_config.get('ppt_pos_counts', {})
         ppt_neg_counts = policy_term_config.get('ppt_neg_counts', {})
-        # Update PPT_RULES entry_age_range for each PPT if provided
-        # Prepare rules for policy term adjustments (shallow copies only)
-        policy_term_ppt_rules = prepare_ppt_rules_with_overrides(PPT_RULES, {})
-        # for ppt_name, (min_age, max_age) in ppt_age_ranges.items():
-        #     if ppt_name in policy_term_ppt_rules:
-        #         policy_term_ppt_rules[ppt_name]['coverage_year_range'] = (min_age, max_age)
 
+        policy_term_ppt_rules = PPT_RULES
         # If any PPT has a nonzero pos/neg count, treat as per-PPT mode
         per_ppt_mode = any(int(ppt_pos_counts.get(ppt, 0)) > 0 or int(ppt_neg_counts.get(ppt, 0)) > 0 for ppt in PPT_NAME) # for different count mode
         ppt_enabled = policy_term_config.get('ppt_enabled', {}) # for same count mode
         # if ppt_age_ranges and per_ppt_mode:
         for ppt_name in PPT_NAME:
-            # min_entry_age, max_entry_age = ppt_age_ranges.get(ppt_name, (18, 65))
             if per_ppt_mode:
                 pos_count = int(ppt_pos_counts.get(ppt_name, 0))
                 neg_count = int(ppt_neg_counts.get(ppt_name, 0))
@@ -590,10 +647,10 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 age = random.randint(min_entry_age, max_entry_age)
                 min_policy_term, max_policy_term = ppt_age_ranges.get(ppt_name, (5, 85))
                 charge_year, coverage_year, maturity_year = get_years(ppt_name, age, policy_term_ppt_rules)
-                if(ppt_name != "Limited Pay (Pay till age 60)"):
-                    policy_term_ppt_rules[ppt_name]["coverage_year_range"] = lambda age: (min(min_policy_term, charge_year+5), min(max_policy_term, 85-age))
-                else:
-                    policy_term_ppt_rules[ppt_name]["coverage_year_range"] = lambda age, charge_year: (max(charge_year+5, min_policy_term), min(max_policy_term, 85-age))
+                # if(ppt_name != "Limited Pay (Pay till age 60)"):
+                #     policy_term_ppt_rules[ppt_name]["coverage_year_range"] = lambda age: (min(min_policy_term, charge_year+5), min(max_policy_term, 85-age))
+                # else:
+                #     policy_term_ppt_rules[ppt_name]["coverage_year_range"] = lambda age, charge_year: (max(charge_year+5, min_policy_term), min(max_policy_term, 85-age))
                 # Use coverage_year_range from PPT_RULES
                 if ppt_name == "Limited Pay (Pay till age 60)":
                     min_policy_term, max_policy_term = rule['coverage_year_range'](age, charge_year)
@@ -609,6 +666,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     get_api_operation(target_rule) + " - " + POLICY_TERM_NAMES[ppt_name],
+                    CHECKING_NOTE_UPDATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, min_policy_term, max_policy_term),
                     'Positive',
@@ -650,6 +708,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     EPIC_MAP[target_rule] + " - " + POLICY_TERM_NAMES[ppt_name],
+                    CHECKING_NOTE_UPDATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, coverage_min, coverage_max),
                     'Negative',
@@ -678,14 +737,8 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
         # counts = epic_counts.get(target_rule, {'positive': 0, 'negative': 0})
         maturity_age_config = epic_counts.get(target_rule, {})
         ppt_age_ranges = maturity_age_config.get('ppt_age_ranges', {})
-        print(ppt_age_ranges)
         ppt_pos_counts = maturity_age_config.get('ppt_pos_counts', {})
         ppt_neg_counts = maturity_age_config.get('ppt_neg_counts', {})
-        maturity_age_ppt_rules = prepare_ppt_rules_with_overrides(PPT_RULES, {})
-
-        for ppt in PPT_NAME:
-            rule = PPT_RULES
-            rule[ppt]['maturity_age_range'] = ppt_age_ranges.get(ppt, rule[ppt]['maturity_age_range'])
 
         # If any PPT has a nonzero pos/neg count, treat as per-PPT mode
         per_ppt_mode = any(int(ppt_pos_counts.get(ppt, 0)) > 0 or int(ppt_neg_counts.get(ppt, 0)) > 0 for ppt in PPT_NAME) # for different count mode
@@ -704,9 +757,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
             # Positive Cases
             for i in range(pos_count):
                 tuid_counter += 1
-                # age = random.randint(min_entry_age, max_entry_age)
                 idx = random.randint(0, 2)
-                # ppt_name = PPT_NAME[(idx+i) % len(PPT_NAME)]
                 rule = PPT_RULES.get(ppt_name)
                 min_entry_age, max_entry_age = rule['entry_age_range']
                 age = random.randint(min_entry_age, max_entry_age)
@@ -723,6 +774,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     get_api_operation(target_rule),
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, min_maturity_age, max_maturity_age),
                     'Positive',
@@ -747,9 +799,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
             # Negative Cases
             for i in range(neg_count):
                 tuid_counter += 1
-                # age = random.randint(min_entry_age, max_entry_age)
                 idx = random.randint(0, 2)
-                # ppt_name = PPT_NAME[(idx+i) % len(PPT_NAME)]
                 rule = PPT_RULES.get(ppt_name)
                 min_entry_age, max_entry_age = rule['entry_age_range']
                 age = random.randint(min_entry_age, max_entry_age)
@@ -764,6 +814,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     EPIC_MAP[target_rule],
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, min_maturity_age, max_maturity_age),
                     'Negative',
@@ -794,11 +845,9 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
         # Positive Cases
         for i in range(counts.get('positive', 0)):
             tuid_counter += 1
-            # age = random.randint(min_entry_age, max_entry_age)
             idx = random.randint(0, 2)
             ppt_name = PPT_NAME[(idx+i) % len(PPT_NAME)]
             rule = PPT_RULES.get(ppt_name)
-            # min_maturity_age, max_maturity_age = rule['maturity_age_range']
             min_entry_age, max_entry_age = rule['entry_age_range']
             age = random.randint(min_entry_age, max_entry_age)
             charge_year, coverage_year, maturity_year = get_years(ppt_name, age)
@@ -813,6 +862,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 get_api_operation(target_rule),
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Positive',
@@ -856,6 +906,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 get_api_operation(target_rule),
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Negative',
@@ -885,23 +936,12 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
         ppt_age_ranges = premium_paying_term_config.get('ppt_age_ranges', {})
         ppt_pos_counts = premium_paying_term_config.get('ppt_pos_counts', {})
         ppt_neg_counts = premium_paying_term_config.get('ppt_neg_counts', {})
-        # Update PPT_RULES premium_paying_term for each PPT if provided // correction needed, to update policy term and correctly use entry age range
-        premium_paying_ppt_rules = prepare_ppt_rules_with_overrides(PPT_RULES, {})
-        ppt_name_list = ["Single Pay", "Limited Pay (5 pay)", "Limited Pay (10 pay)", "Limited Pay (15 pay)"]
-        for ppt_name, (min_age, max_age) in ppt_age_ranges.items():
-            if ppt_name in premium_paying_ppt_rules:
-                if ppt_name in ppt_name_list:
-                    premium_paying_ppt_rules[ppt_name]['charge_year_override'] = min_age
-                else:
-                    premium_paying_ppt_rules[ppt_name]['charge_year_range'] = (min_age, max_age)
-                    if ppt_name != "Limited Pay (Pay till age 60)":
-                        premium_paying_ppt_rules[ppt_name]['charge_year'] = lambda age, r=premium_paying_ppt_rules[ppt_name]['charge_year_range']: random.randint(r[0], r[1])
+
+        premium_paying_ppt_rules = PPT_RULES
         per_ppt_mode = any(int(ppt_pos_counts.get(ppt, 0)) > 0 or int(ppt_neg_counts.get(ppt, 0)) > 0 for ppt in PPT_NAME) # check for 'different count' mode
         ppt_enabled = premium_paying_term_config.get('ppt_enabled', {}) # check for 'same count' mode
 
         for ppt_name in PPT_NAME:
-            
-            # min_entry_age, max_entry_age = ppt_age_ranges.get(ppt_name, (18, 65))
             rule = PPT_RULES.get(ppt_name)
             min_entry_age, max_entry_age = rule['entry_age_range']
             if per_ppt_mode:
@@ -919,10 +959,10 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 message = SCENARIO_MAP['PremiumPayingTerm'](ppt_name, min_ppt=min_ppt, max_ppt=max_ppt)
             elif pos_count > 0 or neg_count > 0:
                 # If an explicit override isn't provided, fall back to a sensible default
-                ppt_limit = premium_paying_ppt_rules[ppt_name].get('charge_year_override', None)
-                if ppt_limit is None:
-                    # try charge_year_range lower bound, or compute via charge_year callable
-                    ppt_limit = premium_paying_ppt_rules[ppt_name].get('charge_year_range', (5, 67))[0]
+                ppt_limit = premium_paying_ppt_rules[ppt_name]['charge_year'](0)
+                # if ppt_limit is None:
+                #     # try charge_year_range lower bound, or compute via charge_year callable
+                #     ppt_limit = premium_paying_ppt_rules[ppt_name].get('charge_year_range')[0]
                 message = SCENARIO_MAP['PremiumPayingTerm'](ppt_name, ppt_limit=ppt_limit)
             # Positive cases for this PPT
             for i in range(pos_count):
@@ -942,6 +982,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     EPIC_MAP[target_rule],
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     message,
                     'Positive',
@@ -979,6 +1020,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     EPIC_MAP[target_rule],
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     message,
                     'Negative',
@@ -1008,28 +1050,23 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
 
         PPTS_NAME = {"Single Pay", "Others"}
         for ppt_name in PPTS_NAME:
-            # min_entry_age, max_entry_age = ppt_age_ranges.get(ppt_name, (18, 65))
             pos_count = sum_assured_validation_config.get(ppt_name, {}).get('positive', 0)
             neg_count = sum_assured_validation_config.get(ppt_name, {}).get('negative', 0)
             if(ppt_name == "Single Pay"):
-                min_sum = sum_assured_validation_config.get(ppt_name, {}).get('min_val', 2500000)
-                max_sum = sum_assured_validation_config.get(ppt_name, {}).get('max_val', 5000000)
+                # min_sum = sum_assured_validation_config.get(ppt_name, {}).get('min_val', 2500000)
+                # max_sum = sum_assured_validation_config.get(ppt_name, {}).get('max_val', 5000000)
+                min_sum, max_sum = PPT_RULES_TT2.get(ppt_name)
                 message = SCENARIO_MAP['SumAssuredValidation'](ppt_name, min_sum=min_sum, max_sum=max_sum)
-            # else:
-            #     min_sum = sum_assured_validation_config.get(ppt_name, {}).get('min_val', 500000)
-            #     ppt_name = random.choice(["Regular Pay", "Limited Pay (5 pay)", "Limited Pay (10 pay)", "Limited Pay (15 pay)", "Limited Pay (Pay till age 60)"])
-            #     message = SCENARIO_MAP['SumAssuredValidation'](ppt_name, min_sum=min_sum)
-            # rule = PPT_RULES.get(ppt_name)
-            # min_entry_age, max_entry_age = rule['entry_age_range']
 
             # Positive cases for this PPT
             for i in range(pos_count):
                 tuid_counter += 1
                 idx = random.randint(0, 2)
                 if(ppt_name != "Single Pay"):
-                    min_sum = sum_assured_validation_config.get(ppt_name, {}).get('min_val', 5000000)
-                    max_sum = 50000000 # assuming an upper limit for positive cases
+                    # min_sum = sum_assured_validation_config.get(ppt_name, {}).get('min_val', 5000000)
+                    # max_sum = 50000000 # assuming an upper limit for positive cases
                     ppt_name = random.choice(["Regular Pay", "Limited Pay (5 pay)", "Limited Pay (10 pay)", "Limited Pay (15 pay)", "Limited Pay (Pay till age 60)"])
+                    min_sum, max_sum = PPT_RULES_TT2.get(ppt_name)
                     message = SCENARIO_MAP['SumAssuredValidation'](ppt_name, min_sum=min_sum)
                 rule = PPT_RULES.get(ppt_name)
                 min_entry_age, max_entry_age = rule['entry_age_range']
@@ -1047,6 +1084,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     EPIC_MAP[target_rule],
+                    CHECKING_NOTE_UPDATE_VALUE,
                     ppt_name,
                     message,
                     'Positive',
@@ -1075,8 +1113,9 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter += 1
                 idx = random.randint(0, 2)
                 if(ppt_name != "Single Pay"):
-                    min_sum = sum_assured_validation_config.get(ppt_name, {}).get('min_val', 500000)
                     ppt_name = random.choice(["Regular Pay", "Limited Pay (5 pay)", "Limited Pay (10 pay)", "Limited Pay (15 pay)", "Limited Pay (Pay till age 60)"])
+                    # min_sum = sum_assured_validation_config.get(ppt_name, {}).get('min_val', 500000)
+                    min_sum, max_sum = PPT_RULES_TT2.get(ppt_name)
                     message = SCENARIO_MAP['SumAssuredValidation'](ppt_name, min_sum=min_sum)
                     neg_assured_sum = min_sum - 1000 # just below min
                 else:
@@ -1096,6 +1135,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     EPIC_MAP[target_rule],
+                    CHECKING_NOTE_UPDATE_VALUE,
                     ppt_name,
                     message,
                     'Negative',
@@ -1141,6 +1181,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 EPIC_MAP[target_rule],
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Positive',
@@ -1181,6 +1222,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 EPIC_MAP[target_rule],
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Negative',
@@ -1225,6 +1267,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 get_api_operation(target_rule),
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Positive',
@@ -1265,6 +1308,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 get_api_operation(target_rule),
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Negative',
@@ -1309,6 +1353,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 get_api_operation(target_rule),
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Positive',
@@ -1349,6 +1394,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 get_api_operation(target_rule),
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Negative',
@@ -1393,6 +1439,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 get_api_operation(target_rule),
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Positive',
@@ -1431,6 +1478,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 get_api_operation(target_rule),
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Negative',
@@ -1456,7 +1504,6 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
     ########################
     # Rider Epics
     ########################
-
     # --- EPIC: EntryAge ---
     if 'EntryAge' in selected_epics_rider: # rider
         target_rule = 'EntryAge'
@@ -1465,10 +1512,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
         ppt_pos_counts = entry_age_config.get('ppt_pos_counts', {})
         ppt_neg_counts = entry_age_config.get('ppt_neg_counts', {})
         # Update PPT_RULES entry_age_range for each PPT if provided
-        entryage_ppt_rules = prepare_ppt_rules_with_overrides(PPT_RULES, {})
-        for ppt_name, (min_age, max_age) in ppt_age_ranges.items():
-            if ppt_name in entryage_ppt_rules:
-                entryage_ppt_rules[ppt_name]['entry_age_range'] = (min_age, max_age)
+        entryage_ppt_rules = PPT_RULES
 
         # If any PPT has a nonzero pos/neg count, treat as per-PPT mode
         per_ppt_mode = any(int(ppt_pos_counts.get(ppt, 0)) > 0 or int(ppt_neg_counts.get(ppt, 0)) > 0 for ppt in PPT_NAME) # for different count mode
@@ -1508,6 +1552,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     EPIC_MAP[target_rule],
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, min_entry_age, max_entry_age),
                     'Positive',
@@ -1564,6 +1609,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     EPIC_MAP[target_rule],
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, min_entry_age, max_entry_age),
                     'Negative',
@@ -1605,7 +1651,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
         ppt_pos_counts = policy_term_config.get('ppt_pos_counts', {})
         ppt_neg_counts = policy_term_config.get('ppt_neg_counts', {})
         # Update PPT_RULES entry_age_range for each PPT if provided
-        policy_term_ppt_rules = prepare_ppt_rules_with_overrides(PPT_RULES, {})
+        policy_term_ppt_rules = PPT_RULES
         # for ppt_name, (min_age, max_age) in ppt_age_ranges.items():
         #     if ppt_name in policy_term_ppt_rules:
         #         policy_term_ppt_rules[ppt_name]['coverage_year_range'] = (min_age, max_age)
@@ -1633,18 +1679,8 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 rule = policy_term_ppt_rules.get(ppt_name)
                 min_entry_age, max_entry_age = rule['entry_age_range']
                 age = random.randint(min_entry_age, max_entry_age)
-                min_policy_term, max_policy_term = ppt_age_ranges.get(ppt_name, (5, 85))
-                # print(ppt_name, min_policy_term, max_policy_term)
-                # if(ppt_name != "Limited Pay (Pay till age 60)"):
-                #     policy_term_ppt_rules[ppt_name]["coverage_year_range"] = lambda age: (min_policy_term, max_policy_term)
-                # else:
-                #     policy_term_ppt_rules[ppt_name]["coverage_year_range"] = lambda age, charge_year: (max(charge_year+5, min_policy_term), max_policy_term)
-                # Use coverage_year_range from PPT_RULES
+                min_policy_term, max_policy_term = ppt_age_ranges.get(ppt_name)
                 charge_year, coverage_year, maturity_year = get_years(ppt_name, age, policy_term_ppt_rules)
-                # if ppt_name == "Limited Pay (Pay till age 60)":
-                #     min_policy_term, max_policy_term = rule['coverage_year_range'](age, charge_year)
-                # else:
-                #     min_policy_term, max_policy_term = rule['coverage_year_range'](age)
                 min_coverage_year_rider, max_coverage_year_rider = PPT_RULES_RIDER["Rider AD"]["coverage_year_range"](age)
                 charge_year_rider, coverage_year_rider, maturity_year_rider = max(5, charge_year), min(coverage_year, 57), min(maturity_year, 75)
                 ad_sum_assured = min(30000000, random.randint(25000, 3 * calculate_discounts(ppt_name)["sumAssured"]))
@@ -1658,6 +1694,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     get_api_operation(target_rule) + " - " + POLICY_TERM_NAMES[ppt_name],
+                    CHECKING_NOTE_UPDATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, min_coverage_year_rider, max_coverage_year_rider),
                     'Positive',
@@ -1718,6 +1755,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     get_api_operation(target_rule) + " - " + POLICY_TERM_NAMES[ppt_name],
+                    CHECKING_NOTE_UPDATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, min_coverage_year_rider, max_coverage_year_rider),
                     'Negative',
@@ -1759,10 +1797,9 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
         # counts = epic_counts.get(target_rule, {'positive': 0, 'negative': 0})
         maturity_age_config = epic_counts_rider.get(target_rule, {})
         ppt_age_ranges = maturity_age_config.get('ppt_age_ranges', {})
-        print(maturity_age_config)
         ppt_pos_counts = maturity_age_config.get('ppt_pos_counts', {})
         ppt_neg_counts = maturity_age_config.get('ppt_neg_counts', {})
-        maturity_age_ppt_rules = prepare_ppt_rules_with_overrides(PPT_RULES, {})
+        maturity_age_ppt_rules = PPT_RULES
 
         for ppt in PPT_NAME:
             rule = PPT_RULES
@@ -1783,7 +1820,6 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
             else:
                 continue
             # Positive Cases
-            print(f"Generating MaturityAge scenarios for PPT: {ppt_name}, Pos: {pos_count}, Neg: {neg_count}")
             for i in range(pos_count):
                 tuid_counter += 1
                 # age = random.randint(min_entry_age, max_entry_age)
@@ -1808,6 +1844,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     get_api_operation(target_rule),
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, min_maturity_age_rider, max_maturity_age_rider),
                     'Positive',
@@ -1868,6 +1905,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     get_api_operation(target_rule),
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     SCENARIO_MAP[target_rule](ppt_name, min_maturity_age_rider, max_maturity_age_rider),
                     'Negative',
@@ -1935,6 +1973,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 get_api_operation(target_rule),
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Positive',
@@ -1997,6 +2036,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 get_api_operation(target_rule),
+                CHECKING_NOTE_CREATE_VALUE,
                 ppt_name,
                 SCENARIO_MAP[target_rule],
                 'Negative',
@@ -2039,17 +2079,9 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
         ppt_age_ranges = premium_paying_term_config.get('ppt_age_ranges', {})
         ppt_pos_counts = premium_paying_term_config.get('ppt_pos_counts', {})
         ppt_neg_counts = premium_paying_term_config.get('ppt_neg_counts', {})
-        # Update PPT_RULES premium_paying_term for each PPT if provided // correction needed, to update policy term and correctly use entry age range
-        premium_paying_ppt_rules = prepare_ppt_rules_with_overrides(PPT_RULES, {})
-        ppt_name_list = ["Single Pay", "Limited Pay (5 pay)", "Limited Pay (10 pay)", "Limited Pay (15 pay)"]
-        for ppt_name, (min_age, max_age) in ppt_age_ranges.items():
-            if ppt_name in premium_paying_ppt_rules:
-                if ppt_name in ppt_name_list:
-                    premium_paying_ppt_rules[ppt_name]['charge_year_override'] = min_age
-                else:
-                    premium_paying_ppt_rules[ppt_name]['charge_year_range'] = (min_age, max_age)
-                    if ppt_name != "Limited Pay (Pay till age 60)":
-                        premium_paying_ppt_rules[ppt_name]['charge_year'] = lambda age, r=premium_paying_ppt_rules[ppt_name]['charge_year_range']: random.randint(r[0], r[1])
+        # Premium paying term adjustments are applied globally; use the module-level rules
+        premium_paying_ppt_rules = PPT_RULES
+
         per_ppt_mode = any(int(ppt_pos_counts.get(ppt, 0)) > 0 or int(ppt_neg_counts.get(ppt, 0)) > 0 for ppt in PPT_NAME) # check for 'different count' mode
         ppt_enabled = premium_paying_term_config.get('ppt_enabled', {}) # check for 'same count' mode
         # print(premium_paying_term_config)
@@ -2071,7 +2103,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 min_ppt, max_ppt = premium_paying_ppt_rules[ppt_name]['charge_year_range']
                 message = SCENARIO_MAP['PremiumPayingTerm'](ppt_name, min_ppt=min_ppt, max_ppt=max_ppt)
             elif pos_count > 0 or neg_count > 0:
-                ppt_limit = premium_paying_ppt_rules[ppt_name]['charge_year_override']
+                ppt_limit = premium_paying_ppt_rules[ppt_name]['charge_year'](0)
                 message = SCENARIO_MAP['PremiumPayingTerm'](ppt_name, ppt_limit=ppt_limit)
             # Positive cases for this PPT
             for i in range(pos_count):
@@ -2094,6 +2126,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     EPIC_MAP[target_rule],
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     message,
                     'Positive',
@@ -2145,6 +2178,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                     tuid_counter,
                     MODULE_NAME,
                     EPIC_MAP[target_rule],
+                    CHECKING_NOTE_CREATE_VALUE,
                     ppt_name,
                     message,
                     'Negative',
@@ -2212,6 +2246,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 EPIC_MAP[target_rule],
+                CHECKING_NOTE_UPDATE_VALUE,
                 ppt_name,
                 message,
                 'Positive',
@@ -2273,6 +2308,7 @@ def generate_test_cases(epic_counts, selected_epics=None, epic_counts_rider=None
                 tuid_counter,
                 MODULE_NAME,
                 EPIC_MAP[target_rule],
+                CHECKING_NOTE_UPDATE_VALUE,
                 ppt_name,
                 message,
                 'Negative',
