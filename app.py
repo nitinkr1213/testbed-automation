@@ -217,6 +217,20 @@ if 'epic_counts_to_generate_rider' not in st.session_state: st.session_state.epi
 if 'config_loaded' not in st.session_state: st.session_state.config_loaded = False
 
 
+def _on_select_all_changed(master_key, epic_names, is_rider=False):
+    """Callback to sync individual epic checkboxes with the master select/deselect checkbox."""
+    try:
+        master_val = st.session_state.get(master_key, True)
+        for epic in epic_names:
+            child_key = f"epic_cb_{epic}_rider" if is_rider else f"epic_cb_{epic}"
+            # Only set when different to avoid unnecessary reruns
+            if st.session_state.get(child_key) != master_val:
+                st.session_state[child_key] = master_val
+    except Exception:
+        # defensive: ignore failures in callback
+        pass
+
+
 # --- Sidebar Configuration ---
 with st.sidebar:
     st.header("🛠️ Configuration Management")
@@ -351,7 +365,14 @@ if st.session_state.selected_module_name_py and st.session_state.generated_df is
         if logic_module and hasattr(logic_module, 'EPIC_MAP'):
 
             epic_map = getattr(logic_module, 'EPIC_MAP')
-            select_all = st.checkbox("Select/Deselect All Epics", value=True, key='select_all_epics_master')
+            # master checkbox that toggles all epic checkboxes below
+            select_all = st.checkbox(
+                "Select/Deselect All Epics",
+                value=True,
+                key='select_all_epics_master',
+                on_change=_on_select_all_changed,
+                args=('select_all_epics_master', list(epic_map.keys()), False)
+            )
             # st.markdown("#### Configure Epics and Case Counts")
             # st.markdown("---")
             with st.expander("ℹ️ Configure Epics and Case Counts", expanded=True):
@@ -690,7 +711,14 @@ if st.session_state.selected_module_name_py and st.session_state.generated_df is
         if logic_module and hasattr(logic_module, 'EPIC_MAP_RIDER'):
 
             epic_map_rider = getattr(logic_module, 'EPIC_MAP_RIDER')
-            select_all_rider = st.checkbox("Select/Deselect All Epics", value=True, key='select_all_epics_master_rider')
+            # master checkbox for rider epics
+            select_all_rider = st.checkbox(
+                "Select/Deselect All Epics",
+                value=True,
+                key='select_all_epics_master_rider',
+                on_change=_on_select_all_changed,
+                args=('select_all_epics_master_rider', list(epic_map_rider.keys()), True)
+            )
             # st.markdown("#### Configure Epics and Case Counts")
             # st.markdown("---")
             with st.expander("ℹ️ Configure Rider Epics and Case Counts", expanded=True):
