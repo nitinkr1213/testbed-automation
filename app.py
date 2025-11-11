@@ -6,52 +6,148 @@ from io import BytesIO
 import os
 import importlib.util
 import json
+import sqlite3
+from pathlib import Path
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGIC_MODULE_DIR = os.path.join(APP_DIR, "logic_modules")
-CONFIG_DIR = os.path.join(APP_DIR, "saved_configs")
 
-# Create config directory if it doesn't exist
-os.makedirs(CONFIG_DIR, exist_ok=True)
+# Database configuration for persistent storage
+DB_PATH = Path.home() / ".streamlit" / "test_data_generator_configs.db"
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+def init_database():
+    """Initialize SQLite database for persistent configuration storage"""
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS configurations (
+                config_name TEXT PRIMARY KEY,
+                config_data TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Database initialization error: {e}")
+        return False
+
+# Initialize database on app start
+init_database()
 
 # --- Configuration Management Functions ---
 def save_configuration(config_name, config_data):
-    """Save configuration to a JSON file"""
+    """Save configuration to SQLite database"""
     try:
-        config_path = os.path.join(CONFIG_DIR, f"{config_name}.json")
-        with open(config_path, 'w') as f:
-            json.dump(config_data, f, indent=2)
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+
+        config_json = json.dumps(config_data)
+
+        # Use INSERT OR REPLACE to handle updates
+        cursor.execute('''
+            INSERT OR REPLACE INTO configurations (config_name, config_data, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        ''', (config_name, config_json))
+
+        conn.commit()
+        conn.close()
         return True
     except Exception as e:
         st.error(f"Error saving configuration: {e}")
         return False
 
 def load_configuration(config_name):
-    """Load configuration from a JSON file"""
+    """Load configuration from SQLite database"""
     try:
-        config_path = os.path.join(CONFIG_DIR, f"{config_name}.json")
-        with open(config_path, 'r') as f:
-            return json.load(f)
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT config_data FROM configurations WHERE config_name = ?
+        ''', (config_name,))
+
+        result = cursor.fetchone()
+        conn.close()
+
+        if result:
+            return json.loads(result[0])
+        return None
     except Exception as e:
         st.error(f"Error loading configuration: {e}")
         return None
 
 def get_saved_configurations():
-    """Get list of saved configuration names"""
+    """Get list of saved configuration names from database"""
     try:
-        configs = [f[:-5] for f in os.listdir(CONFIG_DIR) if f.endswith('.json')]
-        return sorted(configs)
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT config_name FROM configurations ORDER BY updated_at DESC
+        ''')
+
+        configs = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return configs
     except Exception:
         return []
 
 def delete_configuration(config_name):
-    """Delete a saved configuration"""
+    """Delete a saved configuration from database"""
     try:
-        config_path = os.path.join(CONFIG_DIR, f"{config_name}.json")
-        os.remove(config_path)
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            DELETE FROM configurations WHERE config_name = ?
+        ''', (config_name,))
+
+        conn.commit()
+        conn.close()
         return True
     except Exception as e:
         st.error(f"Error deleting configuration: {e}")
+        return False
+
+def export_all_configurations():
+    """Export all configurations as a JSON file for backup"""
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT config_name, config_data FROM configurations')
+        all_configs = {row[0]: json.loads(row[1]) for row in cursor.fetchall()}
+
+        conn.close()
+        return json.dumps(all_configs, indent=2)
+    except Exception as e:
+        st.error(f"Error exporting configurations: {e}")
+        return None
+
+def import_configurations(json_data):
+    """Import configurations from JSON backup"""
+    try:
+        configs = json.loads(json_data)
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+
+        for config_name, config_data in configs.items():
+            config_json = json.dumps(config_data)
+            cursor.execute('''
+                INSERT OR REPLACE INTO configurations (config_name, config_data, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            ''', (config_name, config_json))
+
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Error importing configurations: {e}")
         return False
 
 def collect_current_config():
@@ -217,20 +313,6 @@ if 'epic_counts_to_generate_rider' not in st.session_state: st.session_state.epi
 if 'config_loaded' not in st.session_state: st.session_state.config_loaded = False
 
 
-def _on_select_all_changed(master_key, epic_names, is_rider=False):
-    """Callback to sync individual epic checkboxes with the master select/deselect checkbox."""
-    try:
-        master_val = st.session_state.get(master_key, True)
-        for epic in epic_names:
-            child_key = f"epic_cb_{epic}_rider" if is_rider else f"epic_cb_{epic}"
-            # Only set when different to avoid unnecessary reruns
-            if st.session_state.get(child_key) != master_val:
-                st.session_state[child_key] = master_val
-    except Exception:
-        # defensive: ignore failures in callback
-        pass
-
-
 # --- Sidebar Configuration ---
 with st.sidebar:
     st.header("🛠️ Configuration Management")
@@ -275,7 +357,39 @@ with st.sidebar:
         else:
             st.info("No saved configurations found")
 
-    st.divider()
+        # st.divider()
+
+        # Backup/Restore Section
+        # st.subheader("Backup & Restore")
+
+        # col_backup1, col_backup2 = st.columns(2)
+
+        # with col_backup1:
+        #     # Export configurations
+        #     if st.button("📤 Export All", use_container_width=True, help="Download all configurations as JSON"):
+        #         export_data = export_all_configurations()
+        #         if export_data:
+        #             st.download_button(
+        #                 label="⬇️ Download Backup",
+        #                 data=export_data,
+        #                 file_name=f"configs_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+        #                 mime="application/json",
+        #                 use_container_width=True
+        #             )
+
+        # with col_backup2:
+        #     # Import configurations
+        #     uploaded_file = st.file_uploader("📥 Import Backup", type=['json'], key="import_configs", label_visibility="collapsed")
+        #     if uploaded_file is not None:
+        #         try:
+        #             import_data = uploaded_file.read().decode('utf-8')
+        #             if import_configurations(import_data):
+        #                 st.success("✅ Configurations imported successfully!")
+        #                 st.rerun()
+        #         except Exception as e:
+        #             st.error(f"Import failed: {e}")
+
+    # st.divider()
 
     # There is only one logic module now. Discover it and then
     # accept product display name and product code from the user.
@@ -315,7 +429,7 @@ with st.sidebar:
     # ensure the module pointer remains the discovered module
     st.session_state['selected_module_name_py'] = first_module_py
 
-    st.divider()
+    # st.divider()
     st.header("Configure Case Counts")
 
     # --- START OF CHANGE: Added Radio button for count mode ---
@@ -365,14 +479,7 @@ if st.session_state.selected_module_name_py and st.session_state.generated_df is
         if logic_module and hasattr(logic_module, 'EPIC_MAP'):
 
             epic_map = getattr(logic_module, 'EPIC_MAP')
-            # master checkbox that toggles all epic checkboxes below
-            select_all = st.checkbox(
-                "Select/Deselect All Epics",
-                value=True,
-                key='select_all_epics_master',
-                on_change=_on_select_all_changed,
-                args=('select_all_epics_master', list(epic_map.keys()), False)
-            )
+            select_all = st.checkbox("Select/Deselect All Epics", value=True, key='select_all_epics_master')
             # st.markdown("#### Configure Epics and Case Counts")
             # st.markdown("---")
             with st.expander("ℹ️ Configure Epics and Case Counts", expanded=True):
@@ -711,14 +818,7 @@ if st.session_state.selected_module_name_py and st.session_state.generated_df is
         if logic_module and hasattr(logic_module, 'EPIC_MAP_RIDER'):
 
             epic_map_rider = getattr(logic_module, 'EPIC_MAP_RIDER')
-            # master checkbox for rider epics
-            select_all_rider = st.checkbox(
-                "Select/Deselect All Epics",
-                value=True,
-                key='select_all_epics_master_rider',
-                on_change=_on_select_all_changed,
-                args=('select_all_epics_master_rider', list(epic_map_rider.keys()), True)
-            )
+            select_all_rider = st.checkbox("Select/Deselect All Epics", value=True, key='select_all_epics_master_rider')
             # st.markdown("#### Configure Epics and Case Counts")
             # st.markdown("---")
             with st.expander("ℹ️ Configure Rider Epics and Case Counts", expanded=True):
