@@ -6,110 +6,260 @@ from io import BytesIO
 import os
 import importlib.util
 import json
-import sqlite3
-from pathlib import Path
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGIC_MODULE_DIR = os.path.join(APP_DIR, "logic_modules")
 
-# Database configuration for persistent storage
-DB_PATH = Path.home() / ".streamlit" / "test_data_generator_configs.db"
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+# Google Sheets Configuration
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-def init_database():
-    """Initialize SQLite database for persistent configuration storage"""
+def get_google_sheets_service():
+    """Initialize Google Sheets API service using Streamlit secrets"""
     try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS configurations (
-                config_name TEXT PRIMARY KEY,
-                config_data TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        conn.commit()
-        conn.close()
+        # Load credentials from Streamlit secrets
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=SCOPES
+        )
+        service = build('sheets', 'v4', credentials=credentials)
+        return service
+    except Exception as e:
+        st.error(f"Error initializing Google Sheets API: {e}")
+        st.info("Please configure Google Sheets credentials in Streamlit secrets.")
+        return None
+
+def get_or_create_spreadsheet():
+    """Get spreadsheet ID from secrets or create new one"""
+    try:
+        # Check if spreadsheet ID exists in secrets
+        if "spreadsheet_id" in st.secrets:
+            return st.secrets["spreadsheet_id"]
+        else:
+            st.warning("⚠️ No spreadsheet_id found in secrets. Please add it to .streamlit/secrets.toml")
+            st.info("Create a Google Sheet and add its ID to secrets.toml")
+            return None
+    except Exception as e:
+        st.error(f"Error getting spreadsheet ID: {e}")
+        return None
+
+def init_google_sheets():
+    """Initialize Google Sheets with headers if needed"""
+    try:
+        service = get_google_sheets_service()
+        if not service:
+            return False
+
+        spreadsheet_id = get_or_create_spreadsheet()
+        if not spreadsheet_id:
+            return False
+
+        sheet = service.spreadsheets()
+
+        # Try to read the sheet to check if it exists
+        try:
+            result = sheet.values().get(
+                spreadsheetId=spreadsheet_id,
+                range='Configurations!A1:D1'
+            ).execute()
+
+            # If sheet exists but no headers, add them
+            if not result.get('values'):
+                headers = [['config_name', 'config_data', 'created_at', 'updated_at']]
+                sheet.values().update(
+                    spreadsheetId=spreadsheet_id,
+                    range='Configurations!A1:D1',
+                    valueInputOption='RAW',
+                    body={'values': headers}
+                ).execute()
+        except HttpError:
+            # Sheet doesn't exist, create it
+            body = {
+                'requests': [{
+                    'addSheet': {
+                        'properties': {
+                            'title': 'Configurations',
+                            'gridProperties': {
+                                'frozenRowCount': 1
+                            }
+                        }
+                    }
+                }]
+            }
+            sheet.batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+
+            # Add headers
+            headers = [['config_name', 'config_data', 'created_at', 'updated_at']]
+            sheet.values().update(
+                spreadsheetId=spreadsheet_id,
+                range='Configurations!A1:D1',
+                valueInputOption='RAW',
+                body={'values': headers}
+            ).execute()
+
         return True
     except Exception as e:
-        st.error(f"Database initialization error: {e}")
+        st.error(f"Error initializing Google Sheets: {e}")
         return False
-
-# Initialize database on app start
-init_database()
 
 # --- Configuration Management Functions ---
 def save_configuration(config_name, config_data):
-    """Save configuration to SQLite database"""
+    """Save configuration to Google Sheets"""
     try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
+        service = get_google_sheets_service()
+        if not service:
+            return False
 
+        spreadsheet_id = get_or_create_spreadsheet()
+        if not spreadsheet_id:
+            return False
+
+        sheet = service.spreadsheets()
+
+        # Get all existing configurations
+        result = sheet.values().get(
+            spreadsheetId=spreadsheet_id,
+            range='Configurations!A2:D'
+        ).execute()
+
+        values = result.get('values', [])
         config_json = json.dumps(config_data)
+        timestamp = datetime.now().isoformat()
 
-        # Use INSERT OR REPLACE to handle updates
-        cursor.execute('''
-            INSERT OR REPLACE INTO configurations (config_name, config_data, updated_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-        ''', (config_name, config_json))
+        # Check if configuration already exists
+        row_index = None
+        for i, row in enumerate(values):
+            if row and row[0] == config_name:
+                row_index = i + 2  # +2 because of header row and 0-indexing
+                break
 
-        conn.commit()
-        conn.close()
+        if row_index:
+            # Update existing configuration
+            range_name = f'Configurations!A{row_index}:D{row_index}'
+            new_values = [[config_name, config_json, row[2] if len(row) > 2 else timestamp, timestamp]]
+        else:
+            # Add new configuration
+            range_name = f'Configurations!A{len(values) + 2}:D{len(values) + 2}'
+            new_values = [[config_name, config_json, timestamp, timestamp]]
+
+        sheet.values().update(
+            spreadsheetId=spreadsheet_id,
+            range=range_name,
+            valueInputOption='RAW',
+            body={'values': new_values}
+        ).execute()
+
         return True
     except Exception as e:
         st.error(f"Error saving configuration: {e}")
         return False
 
 def load_configuration(config_name):
-    """Load configuration from SQLite database"""
+    """Load configuration from Google Sheets"""
     try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
+        service = get_google_sheets_service()
+        if not service:
+            return None
 
-        cursor.execute('''
-            SELECT config_data FROM configurations WHERE config_name = ?
-        ''', (config_name,))
+        spreadsheet_id = get_or_create_spreadsheet()
+        if not spreadsheet_id:
+            return None
 
-        result = cursor.fetchone()
-        conn.close()
+        sheet = service.spreadsheets()
 
-        if result:
-            return json.loads(result[0])
+        # Get all configurations
+        result = sheet.values().get(
+            spreadsheetId=spreadsheet_id,
+            range='Configurations!A2:D'
+        ).execute()
+
+        values = result.get('values', [])
+
+        # Find the configuration
+        for row in values:
+            if row and row[0] == config_name:
+                return json.loads(row[1])
+
         return None
     except Exception as e:
         st.error(f"Error loading configuration: {e}")
         return None
 
 def get_saved_configurations():
-    """Get list of saved configuration names from database"""
+    """Get list of saved configuration names from Google Sheets"""
     try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
+        service = get_google_sheets_service()
+        if not service:
+            return []
 
-        cursor.execute('''
-            SELECT config_name FROM configurations ORDER BY updated_at DESC
-        ''')
+        spreadsheet_id = get_or_create_spreadsheet()
+        if not spreadsheet_id:
+            return []
 
-        configs = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        return configs
-    except Exception:
+        sheet = service.spreadsheets()
+
+        # Get all configuration names
+        result = sheet.values().get(
+            spreadsheetId=spreadsheet_id,
+            range='Configurations!A2:A'
+        ).execute()
+
+        values = result.get('values', [])
+        configs = [row[0] for row in values if row]
+
+        return sorted(configs)
+    except Exception as e:
+        st.error(f"Error getting configurations: {e}")
         return []
 
 def delete_configuration(config_name):
-    """Delete a saved configuration from database"""
+    """Delete a saved configuration from Google Sheets"""
     try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
+        service = get_google_sheets_service()
+        if not service:
+            return False
 
-        cursor.execute('''
-            DELETE FROM configurations WHERE config_name = ?
-        ''', (config_name,))
+        spreadsheet_id = get_or_create_spreadsheet()
+        if not spreadsheet_id:
+            return False
 
-        conn.commit()
-        conn.close()
-        return True
+        sheet = service.spreadsheets()
+
+        # Get all configurations
+        result = sheet.values().get(
+            spreadsheetId=spreadsheet_id,
+            range='Configurations!A2:D'
+        ).execute()
+
+        values = result.get('values', [])
+
+        # Find the row to delete
+        row_index = None
+        for i, row in enumerate(values):
+            if row and row[0] == config_name:
+                row_index = i + 2  # +2 because of header row and 0-indexing
+                break
+
+        if row_index:
+            # Delete the row
+            body = {
+                'requests': [{
+                    'deleteDimension': {
+                        'range': {
+                            'sheetId': 1326318340,  # Assuming first sheet
+                            'dimension': 'ROWS',
+                            'startIndex': row_index - 1,
+                            'endIndex': row_index
+                        }
+                    }
+                }]
+            }
+            sheet.batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+            return True
+
+        return False
     except Exception as e:
         st.error(f"Error deleting configuration: {e}")
         return False
@@ -117,35 +267,45 @@ def delete_configuration(config_name):
 def export_all_configurations():
     """Export all configurations as a JSON file for backup"""
     try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
+        service = get_google_sheets_service()
+        if not service:
+            return None
 
-        cursor.execute('SELECT config_name, config_data FROM configurations')
-        all_configs = {row[0]: json.loads(row[1]) for row in cursor.fetchall()}
+        spreadsheet_id = get_or_create_spreadsheet()
+        if not spreadsheet_id:
+            return None
 
-        conn.close()
+        sheet = service.spreadsheets()
+
+        # Get all configurations
+        result = sheet.values().get(
+            spreadsheetId=spreadsheet_id,
+            range='Configurations!A2:D'
+        ).execute()
+
+        values = result.get('values', [])
+        all_configs = {}
+
+        for row in values:
+            if row and len(row) >= 2:
+                all_configs[row[0]] = json.loads(row[1])
+
         return json.dumps(all_configs, indent=2)
     except Exception as e:
         st.error(f"Error exporting configurations: {e}")
         return None
 
 def import_configurations(json_data):
-    """Import configurations from JSON backup"""
+    """Import configurations from JSON backup to Google Sheets"""
     try:
         configs = json.loads(json_data)
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
+        success_count = 0
 
         for config_name, config_data in configs.items():
-            config_json = json.dumps(config_data)
-            cursor.execute('''
-                INSERT OR REPLACE INTO configurations (config_name, config_data, updated_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP)
-            ''', (config_name, config_json))
+            if save_configuration(config_name, config_data):
+                success_count += 1
 
-        conn.commit()
-        conn.close()
-        return True
+        return success_count > 0
     except Exception as e:
         st.error(f"Error importing configurations: {e}")
         return False
@@ -331,7 +491,7 @@ with st.sidebar:
             else:
                 st.warning("Please enter a configuration name")
 
-        st.divider()
+        # st.divider()
 
         # Load Configuration
         st.subheader("Load Saved Configuration")
